@@ -11,7 +11,8 @@
   "dependencies": {
     "next": "^15",
     "react": "^19",
-    "react-dom": "^19"
+    "react-dom": "^19",
+    "@packetforge/engine": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5",
