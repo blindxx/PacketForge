@@ -1,0 +1,10 @@
+{
+  "name": "packetforge",
+  "private": true,
+  "packageManager": "pnpm@10.29.3",
+  "scripts": {
+    "dev": "pnpm --filter @packetforge/web dev",
+    "build": "pnpm --filter @packetforge/web build",
+    "lint": "pnpm --filter @packetforge/web lint"
+  }
+}
