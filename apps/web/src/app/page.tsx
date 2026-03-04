@@ -2,22 +2,23 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import type { EngineOutputEvent } from "@packetforge/engine";
-
-import { createDemoSession } from "@/lib/engine-session-demo";
+import { createSession, type EngineEvent } from "@packetforge/engine";
 
 export default function Home() {
-  const session = useMemo(() => createDemoSession(), []);
-  const [lastMessage, setLastMessage] = useState<string>("no engine events yet");
+  const session = useMemo(() => createSession(), []);
+  const [lastEvent, setLastEvent] = useState<string>("no engine events yet");
 
   useEffect(() => {
-    const unsubscribe = session.subscribeEvents((event: EngineOutputEvent) => {
-      if (event.type === "stdout") {
-        setLastMessage(event.message);
+    const unsubscribe = session.subscribeEvents((event: EngineEvent) => {
+      if (event.type === "output/text" || event.type === "output/error") {
+        setLastEvent(event.text);
+        return;
       }
+
+      setLastEvent(event.type);
     });
 
-    session.processInput("show clock");
+    session.processInput("help");
 
     return unsubscribe;
   }, [session]);
@@ -29,7 +30,8 @@ export default function Home() {
         CCNA training simulator — train like an engineer.
       </p>
       <p style={{ marginTop: "1rem" }}>Prompt: {session.getPrompt()}</p>
-      <p style={{ marginTop: "0.5rem" }}>Latest engine event: {lastMessage}</p>
+      <p style={{ marginTop: "0.5rem" }}>Latest engine event: {lastEvent}</p>
+      <p style={{ marginTop: "0.5rem" }}>Action log length: {session.getActionLog().length}</p>
     </div>
   );
 }
