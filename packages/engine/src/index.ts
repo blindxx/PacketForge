@@ -56,9 +56,10 @@ export interface EngineState {
   lastEvent?: EngineEvent;
 }
 
-export interface EngineSnapshot {
+export interface EngineSnapshot<TState = unknown> {
   schemaVersion: 1;
   mode: ModeStackState;
+  state: TState;
   lastInput?: string;
   lastEvent?: EngineEvent;
   actionLog: EngineAction[];
@@ -70,7 +71,7 @@ export interface EngineSession {
   getState(): EngineState;
   getModeStack(): ModeStackState;
   getActionLog(): EngineAction[];
-  getSnapshot(): EngineSnapshot;
+  getSnapshot(): EngineSnapshot<EngineState>;
   subscribeEvents(listener: (event: EngineEvent) => void): () => void;
   getCompletions(request: CompletionRequest): Promise<CompletionResponse>;
 }
@@ -97,6 +98,12 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
     schemaVersion: 1,
     mode,
   };
+  let tick = 0;
+
+  const nextTimestamp = () => {
+    tick += 1;
+    return tick;
+  };
 
   const emit = (event: EngineEvent) => {
     state.lastEvent = event;
@@ -116,7 +123,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         return;
       }
 
-      const timestamp = Date.now();
+      const timestamp = nextTimestamp();
 
       if (normalizedInput === "help") {
         appendAction({ type: "command/help", timestamp });
@@ -174,6 +181,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
       return {
         schemaVersion: 1,
         mode: { ...mode, stack: [...mode.stack] },
+        state: { ...state, mode: { ...state.mode, stack: [...state.mode.stack] } },
         lastInput: state.lastInput,
         lastEvent: state.lastEvent,
         actionLog: [...actionLog],
