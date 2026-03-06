@@ -41,7 +41,13 @@ export interface CompletionResponse {
 export type EngineEvent =
   | { type: "output/text"; text: string; timestamp: number }
   | { type: "output/error"; text: string; timestamp: number }
-  | { type: "output/clear"; timestamp: number };
+  | { type: "output/clear"; timestamp: number }
+  | {
+      type: "mode/changed";
+      from: EngineModeId[];
+      to: EngineModeId[];
+      timestamp: number;
+    };
 
 export interface EngineAction {
   type: string;
@@ -52,6 +58,7 @@ export interface EngineAction {
 export interface EngineState {
   schemaVersion: 1;
   mode: ModeStackState;
+  modeStack: EngineModeId[];
   lastInput?: string;
   lastEvent?: EngineEvent;
 }
@@ -59,6 +66,7 @@ export interface EngineState {
 export interface EngineSnapshot<TState = unknown> {
   schemaVersion: 1;
   mode: ModeStackState;
+  modeStack: EngineModeId[];
   state: TState;
   lastInput?: string;
   lastEvent?: EngineEvent;
@@ -86,17 +94,30 @@ export interface EngineSessionFactory {
 }
 
 export function createSession(options?: CreateSessionOptions): EngineSession {
+  const getActiveMode = (stack: EngineModeId[]) => stack[stack.length - 1] ?? "exec";
+  const renderPromptFromMode = (activeMode: EngineModeId) => {
+    if (activeMode === "privileged") {
+      return "packetforge# ";
+    }
+    if (activeMode === "config") {
+      return "packetforge(config)# ";
+    }
+    return "packetforge> ";
+  };
+
+  const promptOverride = options?.prompt?.trim().length ? options.prompt : undefined;
+
   const mode: ModeStackState = {
     activeModeId: options?.modeId ?? "exec",
     stack: [options?.modeId ?? "exec"],
   };
-  const prompt = options?.prompt ?? "packetforge> ";
   const actionLog: EngineAction[] = [];
   const listeners = new Set<(event: EngineEvent) => void>();
 
   const state: EngineState = {
     schemaVersion: 1,
     mode,
+    modeStack: [...mode.stack],
   };
   let tick = 0;
 
@@ -112,6 +133,47 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
 
   const appendAction = (action: EngineAction) => {
     actionLog.push(action);
+  };
+
+  const syncModeState = () => {
+    mode.activeModeId = getActiveMode(mode.stack);
+    state.modeStack = [...mode.stack];
+  };
+
+  const toPayloadStack = (stack: EngineModeId[]) => stack.join(" > ");
+
+  const applyModeChange = (
+    type: "MODE_PUSH" | "MODE_POP" | "MODE_RESET",
+    command: string,
+    nextStack: EngineModeId[],
+    timestamp: number,
+  ) => {
+    const previousStack = [...mode.stack];
+    mode.stack = nextStack;
+    syncModeState();
+
+    appendAction({
+      type,
+      timestamp,
+      payload: {
+        command,
+        from: toPayloadStack(previousStack),
+        to: toPayloadStack(nextStack),
+      },
+    });
+
+    emit({ type: "mode/changed", from: previousStack, to: [...nextStack], timestamp });
+  };
+
+  const emitModeAwareUnknownCommand = (timestamp: number, command: string) => {
+    const activeMode = getActiveMode(mode.stack);
+    const errorText = `% Unknown command (${activeMode} mode)`;
+    appendAction({
+      type: "command/unknown",
+      timestamp,
+      payload: { input: command, mode: activeMode },
+    });
+    emit({ type: "output/error", text: errorText, timestamp });
   };
 
   return {
@@ -158,18 +220,57 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         return;
       }
 
-      appendAction({ type: "command/unknown", timestamp, payload: { input: normalizedInput } });
-      emit({
-        type: "output/error",
-        text: `Unknown command: ${normalizedInput}`,
-        timestamp,
-      });
+      const activeMode = getActiveMode(mode.stack);
+
+      if (normalizedInput === "enable") {
+        if (activeMode !== "exec") {
+          emitModeAwareUnknownCommand(timestamp, normalizedInput);
+          return;
+        }
+
+        applyModeChange("MODE_PUSH", normalizedInput, [...mode.stack, "privileged"], timestamp);
+        return;
+      }
+
+      if (normalizedInput === "configure terminal") {
+        if (activeMode !== "privileged") {
+          emitModeAwareUnknownCommand(timestamp, normalizedInput);
+          return;
+        }
+
+        applyModeChange("MODE_PUSH", normalizedInput, [...mode.stack, "config"], timestamp);
+        return;
+      }
+
+      if (normalizedInput === "exit") {
+        if (mode.stack.length === 1) {
+          return;
+        }
+
+        applyModeChange("MODE_POP", normalizedInput, mode.stack.slice(0, -1), timestamp);
+        return;
+      }
+
+      if (normalizedInput === "end") {
+        if (mode.stack.length === 1) {
+          return;
+        }
+
+        applyModeChange("MODE_RESET", normalizedInput, ["exec"], timestamp);
+        return;
+      }
+
+      emitModeAwareUnknownCommand(timestamp, normalizedInput);
     },
     getPrompt() {
-      return prompt;
+      return promptOverride ?? renderPromptFromMode(getActiveMode(mode.stack));
     },
     getState() {
-      return { ...state, mode: { ...state.mode, stack: [...state.mode.stack] } };
+      return {
+        ...state,
+        mode: { ...state.mode, stack: [...state.mode.stack] },
+        modeStack: [...state.modeStack],
+      };
     },
     getModeStack() {
       return { ...mode, stack: [...mode.stack] };
@@ -181,7 +282,8 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
       return {
         schemaVersion: 1,
         mode: { ...mode, stack: [...mode.stack] },
-        state: { ...state, mode: { ...state.mode, stack: [...state.mode.stack] } },
+        modeStack: [...mode.stack],
+        state: { ...state, mode: { ...state.mode, stack: [...state.mode.stack] }, modeStack: [...state.modeStack] },
         lastInput: state.lastInput,
         lastEvent: state.lastEvent,
         actionLog: [...actionLog],
