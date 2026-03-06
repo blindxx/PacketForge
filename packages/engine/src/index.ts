@@ -105,6 +105,8 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
     return "packetforge> ";
   };
 
+  const promptOverride = options?.prompt?.trim().length ? options.prompt : undefined;
+
   const mode: ModeStackState = {
     activeModeId: options?.modeId ?? "exec",
     stack: [options?.modeId ?? "exec"],
@@ -261,7 +263,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
       emitModeAwareUnknownCommand(timestamp, normalizedInput);
     },
     getPrompt() {
-      return renderPromptFromMode(getActiveMode(mode.stack));
+      return promptOverride ?? renderPromptFromMode(getActiveMode(mode.stack));
     },
     getState() {
       return {
@@ -281,7 +283,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         schemaVersion: 1,
         mode: { ...mode, stack: [...mode.stack] },
         modeStack: [...mode.stack],
-        state: { ...state, mode: { ...state.mode, stack: [...state.mode.stack] } },
+        state: { ...state, mode: { ...state.mode, stack: [...state.mode.stack] }, modeStack: [...state.modeStack] },
         lastInput: state.lastInput,
         lastEvent: state.lastEvent,
         actionLog: [...actionLog],
