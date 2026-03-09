@@ -176,6 +176,11 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
     emit({ type: "output/error", text: errorText, timestamp });
   };
 
+  const emitModeUnavailable = (timestamp: number, command: string) => {
+    appendAction({ type: "command/invalid-mode", timestamp, payload: { input: command } });
+    emit({ type: "output/error", text: "% Command not available in this mode", timestamp });
+  };
+
   return {
     async processInput(input: string): Promise<void> {
       const normalizedInput = input.trim();
@@ -191,7 +196,8 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         appendAction({ type: "command/help", timestamp });
         emit({
           type: "output/text",
-          text: "Available commands: help, echo <text>, clear, mode",
+          text:
+            "Available commands: help, echo <text>, clear, mode, enable, disable, configure terminal, exit, end",
           timestamp,
         });
         return;
@@ -224,7 +230,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
 
       if (normalizedInput === "enable") {
         if (activeMode !== "exec") {
-          emitModeAwareUnknownCommand(timestamp, normalizedInput);
+          emitModeUnavailable(timestamp, normalizedInput);
           return;
         }
 
@@ -232,9 +238,19 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         return;
       }
 
+      if (normalizedInput === "disable") {
+        if (activeMode !== "privileged") {
+          emitModeUnavailable(timestamp, normalizedInput);
+          return;
+        }
+
+        applyModeChange("MODE_RESET", normalizedInput, ["exec"], timestamp);
+        return;
+      }
+
       if (normalizedInput === "configure terminal") {
         if (activeMode !== "privileged") {
-          emitModeAwareUnknownCommand(timestamp, normalizedInput);
+          emitModeUnavailable(timestamp, normalizedInput);
           return;
         }
 
@@ -252,11 +268,16 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
       }
 
       if (normalizedInput === "end") {
-        if (mode.stack.length === 1) {
+        if (activeMode !== "config") {
+          emitModeUnavailable(timestamp, normalizedInput);
           return;
         }
 
-        applyModeChange("MODE_RESET", normalizedInput, ["exec"], timestamp);
+        if (mode.stack.length > 1) {
+          applyModeChange("MODE_POP", normalizedInput, mode.stack.slice(0, -1), timestamp);
+        } else {
+          applyModeChange("MODE_RESET", normalizedInput, ["exec"], timestamp);
+        }
         return;
       }
 
