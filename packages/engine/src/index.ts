@@ -273,7 +273,9 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
           return;
         }
 
-        applyModeChange("MODE_POP", normalizedInput, mode.stack.slice(0, -1), timestamp);
+        if (mode.stack.length > 1) {
+          applyModeChange("MODE_POP", normalizedInput, mode.stack.slice(0, -1), timestamp);
+        }
         return;
       }
 
