@@ -275,6 +275,8 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
 
         if (mode.stack.length > 1) {
           applyModeChange("MODE_POP", normalizedInput, mode.stack.slice(0, -1), timestamp);
+        } else {
+          applyModeChange("MODE_RESET", normalizedInput, ["exec"], timestamp);
         }
         return;
       }
