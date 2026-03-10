@@ -59,6 +59,9 @@ export interface EngineState {
   schemaVersion: 1;
   mode: ModeStackState;
   modeStack: EngineModeId[];
+  deviceConfig: {
+    hostname: string;
+  };
   lastInput?: string;
   lastEvent?: EngineEvent;
 }
@@ -102,14 +105,14 @@ interface RegisteredCommand {
 
 export function createSession(options?: CreateSessionOptions): EngineSession {
   const getActiveMode = (stack: EngineModeId[]) => stack[stack.length - 1] ?? "exec";
-  const renderPromptFromMode = (activeMode: EngineModeId) => {
+  const renderPromptFromMode = (hostname: string, activeMode: EngineModeId) => {
     if (activeMode === "privileged") {
-      return "packetforge# ";
+      return `${hostname}# `;
     }
     if (activeMode === "config") {
-      return "packetforge(config)# ";
+      return `${hostname}(config)# `;
     }
-    return "packetforge> ";
+    return `${hostname}> `;
   };
 
   const promptOverride = options?.prompt?.trim().length ? options.prompt : undefined;
@@ -125,6 +128,9 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
     schemaVersion: 1,
     mode,
     modeStack: [...mode.stack],
+    deviceConfig: {
+      hostname: "packetforge",
+    },
   };
   let tick = 0;
 
@@ -319,6 +325,19 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         },
       },
       {
+        key: "show running-config",
+        helpLabel: "show running-config",
+        match: (input) => input === "show running-config",
+        run: (timestamp) => {
+          appendAction({ type: "command/show-running-config", timestamp });
+          emit({
+            type: "output/text",
+            text: `hostname ${state.deviceConfig.hostname}`,
+            timestamp,
+          });
+        },
+      },
+      {
         key: "exit",
         helpLabel: "exit",
         match: (input) => input === "exit",
@@ -380,6 +399,20 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         },
       },
       {
+        key: "hostname",
+        helpLabel: "hostname <name>",
+        match: (input) => /^hostname\s+\S+$/.test(input),
+        run: (timestamp, input) => {
+          const hostname = input.split(/\s+/, 2)[1];
+          state.deviceConfig.hostname = hostname;
+          appendAction({
+            type: "config/hostname",
+            timestamp,
+            payload: { hostname },
+          });
+        },
+      },
+      {
         key: "exit",
         helpLabel: "exit",
         match: (input) => input === "exit",
@@ -435,13 +468,14 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
       emitModeAwareUnknownCommand(timestamp, normalizedInput);
     },
     getPrompt() {
-      return promptOverride ?? renderPromptFromMode(getActiveMode(mode.stack));
+      return promptOverride ?? renderPromptFromMode(state.deviceConfig.hostname, getActiveMode(mode.stack));
     },
     getState() {
       return {
         ...state,
         mode: { ...state.mode, stack: [...state.mode.stack] },
         modeStack: [...state.modeStack],
+        deviceConfig: { ...state.deviceConfig },
       };
     },
     getModeStack() {
@@ -455,7 +489,12 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         schemaVersion: 1,
         mode: { ...mode, stack: [...mode.stack] },
         modeStack: [...mode.stack],
-        state: { ...state, mode: { ...state.mode, stack: [...state.mode.stack] }, modeStack: [...state.modeStack] },
+        state: {
+          ...state,
+          mode: { ...state.mode, stack: [...state.mode.stack] },
+          modeStack: [...state.modeStack],
+          deviceConfig: { ...state.deviceConfig },
+        },
         lastInput: state.lastInput,
         lastEvent: state.lastEvent,
         actionLog: [...actionLog],
