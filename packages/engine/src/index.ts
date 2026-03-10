@@ -93,6 +93,13 @@ export interface EngineSessionFactory {
   createSession(options?: CreateSessionOptions): EngineSession;
 }
 
+interface RegisteredCommand {
+  key: string;
+  helpLabel: string;
+  match: (input: string) => boolean;
+  run: (timestamp: number, input: string) => void;
+}
+
 export function createSession(options?: CreateSessionOptions): EngineSession {
   const getActiveMode = (stack: EngineModeId[]) => stack[stack.length - 1] ?? "exec";
   const renderPromptFromMode = (activeMode: EngineModeId) => {
@@ -181,6 +188,218 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
     emit({ type: "output/error", text: "% Command not available in this mode", timestamp });
   };
 
+  const commandRegistry: Record<EngineModeId, RegisteredCommand[]> = {
+    exec: [
+      {
+        key: "help",
+        helpLabel: "help",
+        match: (input) => input === "help",
+        run: (timestamp) => {
+          const activeMode = getActiveMode(mode.stack);
+          const commands = commandRegistry[activeMode] ?? [];
+          appendAction({ type: "command/help", timestamp });
+          emit({
+            type: "output/text",
+            text: `Available commands: ${commands.map((command) => command.helpLabel).join(", ")}`,
+            timestamp,
+          });
+        },
+      },
+      {
+        key: "echo",
+        helpLabel: "echo <text>",
+        match: (input) => input.startsWith("echo "),
+        run: (timestamp, input) => {
+          const text = input.slice(5);
+          appendAction({ type: "command/echo", timestamp, payload: { text } });
+          emit({ type: "output/text", text, timestamp });
+        },
+      },
+      {
+        key: "clear",
+        helpLabel: "clear",
+        match: (input) => input === "clear",
+        run: (timestamp) => {
+          appendAction({ type: "command/clear", timestamp });
+          emit({ type: "output/clear", timestamp });
+        },
+      },
+      {
+        key: "mode",
+        helpLabel: "mode",
+        match: (input) => input === "mode",
+        run: (timestamp) => {
+          appendAction({ type: "command/mode", timestamp });
+          emit({
+            type: "output/text",
+            text: `Mode stack: ${mode.stack.join(" > ")}`,
+            timestamp,
+          });
+        },
+      },
+      {
+        key: "enable",
+        helpLabel: "enable",
+        match: (input) => input === "enable",
+        run: (timestamp, input) => {
+          applyModeChange("MODE_PUSH", input, [...mode.stack, "privileged"], timestamp);
+        },
+      },
+    ],
+    privileged: [
+      {
+        key: "help",
+        helpLabel: "help",
+        match: (input) => input === "help",
+        run: (timestamp) => {
+          const activeMode = getActiveMode(mode.stack);
+          const commands = commandRegistry[activeMode] ?? [];
+          appendAction({ type: "command/help", timestamp });
+          emit({
+            type: "output/text",
+            text: `Available commands: ${commands.map((command) => command.helpLabel).join(", ")}`,
+            timestamp,
+          });
+        },
+      },
+      {
+        key: "echo",
+        helpLabel: "echo <text>",
+        match: (input) => input.startsWith("echo "),
+        run: (timestamp, input) => {
+          const text = input.slice(5);
+          appendAction({ type: "command/echo", timestamp, payload: { text } });
+          emit({ type: "output/text", text, timestamp });
+        },
+      },
+      {
+        key: "clear",
+        helpLabel: "clear",
+        match: (input) => input === "clear",
+        run: (timestamp) => {
+          appendAction({ type: "command/clear", timestamp });
+          emit({ type: "output/clear", timestamp });
+        },
+      },
+      {
+        key: "mode",
+        helpLabel: "mode",
+        match: (input) => input === "mode",
+        run: (timestamp) => {
+          appendAction({ type: "command/mode", timestamp });
+          emit({
+            type: "output/text",
+            text: `Mode stack: ${mode.stack.join(" > ")}`,
+            timestamp,
+          });
+        },
+      },
+      {
+        key: "disable",
+        helpLabel: "disable",
+        match: (input) => input === "disable",
+        run: (timestamp, input) => {
+          applyModeChange("MODE_RESET", input, ["exec"], timestamp);
+        },
+      },
+      {
+        key: "configure terminal",
+        helpLabel: "configure terminal",
+        match: (input) => input === "configure terminal",
+        run: (timestamp, input) => {
+          applyModeChange("MODE_PUSH", input, [...mode.stack, "config"], timestamp);
+        },
+      },
+      {
+        key: "exit",
+        helpLabel: "exit",
+        match: (input) => input === "exit",
+        run: (timestamp, input) => {
+          if (mode.stack.length === 1) {
+            return;
+          }
+
+          applyModeChange("MODE_POP", input, mode.stack.slice(0, -1), timestamp);
+        },
+      },
+    ],
+    config: [
+      {
+        key: "help",
+        helpLabel: "help",
+        match: (input) => input === "help",
+        run: (timestamp) => {
+          const activeMode = getActiveMode(mode.stack);
+          const commands = commandRegistry[activeMode] ?? [];
+          appendAction({ type: "command/help", timestamp });
+          emit({
+            type: "output/text",
+            text: `Available commands: ${commands.map((command) => command.helpLabel).join(", ")}`,
+            timestamp,
+          });
+        },
+      },
+      {
+        key: "echo",
+        helpLabel: "echo <text>",
+        match: (input) => input.startsWith("echo "),
+        run: (timestamp, input) => {
+          const text = input.slice(5);
+          appendAction({ type: "command/echo", timestamp, payload: { text } });
+          emit({ type: "output/text", text, timestamp });
+        },
+      },
+      {
+        key: "clear",
+        helpLabel: "clear",
+        match: (input) => input === "clear",
+        run: (timestamp) => {
+          appendAction({ type: "command/clear", timestamp });
+          emit({ type: "output/clear", timestamp });
+        },
+      },
+      {
+        key: "mode",
+        helpLabel: "mode",
+        match: (input) => input === "mode",
+        run: (timestamp) => {
+          appendAction({ type: "command/mode", timestamp });
+          emit({
+            type: "output/text",
+            text: `Mode stack: ${mode.stack.join(" > ")}`,
+            timestamp,
+          });
+        },
+      },
+      {
+        key: "exit",
+        helpLabel: "exit",
+        match: (input) => input === "exit",
+        run: (timestamp, input) => {
+          if (mode.stack.length === 1) {
+            return;
+          }
+
+          applyModeChange("MODE_POP", input, mode.stack.slice(0, -1), timestamp);
+        },
+      },
+      {
+        key: "end",
+        helpLabel: "end",
+        match: (input) => input === "end",
+        run: (timestamp, input) => {
+          if (mode.stack.length > 1) {
+            applyModeChange("MODE_POP", input, mode.stack.slice(0, -1), timestamp);
+          } else {
+            applyModeChange("MODE_RESET", input, ["exec"], timestamp);
+          }
+        },
+      },
+    ],
+  };
+
+  const allRegisteredCommands = Object.values(commandRegistry).flat();
+
   return {
     async processInput(input: string): Promise<void> {
       const normalizedInput = input.trim();
@@ -191,93 +410,17 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
       }
 
       const timestamp = nextTimestamp();
-
-      if (normalizedInput === "help") {
-        appendAction({ type: "command/help", timestamp });
-        emit({
-          type: "output/text",
-          text:
-            "Available commands: help, echo <text>, clear, mode, enable, disable, configure terminal, exit, end",
-          timestamp,
-        });
-        return;
-      }
-
-      if (normalizedInput.startsWith("echo ")) {
-        const text = normalizedInput.slice(5);
-        appendAction({ type: "command/echo", timestamp, payload: { text } });
-        emit({ type: "output/text", text, timestamp });
-        return;
-      }
-
-      if (normalizedInput === "clear") {
-        appendAction({ type: "command/clear", timestamp });
-        emit({ type: "output/clear", timestamp });
-        return;
-      }
-
-      if (normalizedInput === "mode") {
-        appendAction({ type: "command/mode", timestamp });
-        emit({
-          type: "output/text",
-          text: `Mode stack: ${mode.stack.join(" > ")}`,
-          timestamp,
-        });
-        return;
-      }
-
       const activeMode = getActiveMode(mode.stack);
+      const modeCommands = commandRegistry[activeMode] ?? [];
+      const matchedModeCommand = modeCommands.find((command) => command.match(normalizedInput));
 
-      if (normalizedInput === "enable") {
-        if (activeMode !== "exec") {
-          emitModeUnavailable(timestamp, normalizedInput);
-          return;
-        }
-
-        applyModeChange("MODE_PUSH", normalizedInput, [...mode.stack, "privileged"], timestamp);
+      if (matchedModeCommand) {
+        matchedModeCommand.run(timestamp, normalizedInput);
         return;
       }
 
-      if (normalizedInput === "disable") {
-        if (activeMode !== "privileged") {
-          emitModeUnavailable(timestamp, normalizedInput);
-          return;
-        }
-
-        applyModeChange("MODE_RESET", normalizedInput, ["exec"], timestamp);
-        return;
-      }
-
-      if (normalizedInput === "configure terminal") {
-        if (activeMode !== "privileged") {
-          emitModeUnavailable(timestamp, normalizedInput);
-          return;
-        }
-
-        applyModeChange("MODE_PUSH", normalizedInput, [...mode.stack, "config"], timestamp);
-        return;
-      }
-
-      if (normalizedInput === "exit") {
-        if (mode.stack.length === 1) {
-          return;
-        }
-
-        applyModeChange("MODE_POP", normalizedInput, mode.stack.slice(0, -1), timestamp);
-        return;
-      }
-
-      if (normalizedInput === "end") {
-        if (activeMode !== "config") {
-          emitModeUnavailable(timestamp, normalizedInput);
-          return;
-        }
-
-        if (mode.stack.length > 1) {
-          applyModeChange("MODE_POP", normalizedInput, mode.stack.slice(0, -1), timestamp);
-        } else {
-          applyModeChange("MODE_RESET", normalizedInput, ["exec"], timestamp);
-        }
+      if (allRegisteredCommands.some((command) => command.match(normalizedInput))) {
+        emitModeUnavailable(timestamp, normalizedInput);
         return;
       }
 
