@@ -245,6 +245,14 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
           applyModeChange("MODE_PUSH", input, [...mode.stack, "privileged"], timestamp);
         },
       },
+      {
+        key: "exit",
+        helpLabel: "exit",
+        match: (input) => input === "exit",
+        run: () => {
+          return;
+        },
+      },
     ],
     privileged: [
       {
