@@ -171,6 +171,10 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
     mode.stack = nextStack;
     syncModeState();
 
+    if (getActiveMode(previousStack) === "config-if" && getActiveMode(nextStack) !== "config-if") {
+      state.activeInterface = undefined;
+    }
+
     appendAction({
       type,
       timestamp,
