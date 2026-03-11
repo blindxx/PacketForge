@@ -453,11 +453,9 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         helpLabel: "end",
         match: (input) => input === "end",
         run: (timestamp, input) => {
-          if (mode.stack.length > 1) {
-            applyModeChange("MODE_POP", input, mode.stack.slice(0, -1), timestamp);
-          } else {
-            applyModeChange("MODE_RESET", input, ["exec"], timestamp);
-          }
+          const targetStack =
+            mode.stack.length > 0 ? [mode.stack[0]] : ["exec"];
+          applyModeChange("MODE_RESET", input, targetStack, timestamp);
         },
       },
     ],
