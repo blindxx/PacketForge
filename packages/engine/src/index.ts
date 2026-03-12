@@ -345,7 +345,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         run: (timestamp) => {
           appendAction({ type: "command/show-running-config", timestamp });
           const interfaceBlocks = Object.keys(state.interfaces)
-            .sort((left, right) => left.localeCompare(right))
+            .sort((left, right) => left.localeCompare(right, "en", { numeric: true }))
             .map((interfaceName) => {
               const iface = state.interfaces[interfaceName];
               const shutdownLine = iface.isShutdown ? " shutdown" : " no shutdown";
