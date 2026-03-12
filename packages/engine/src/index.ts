@@ -529,7 +529,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         run: (timestamp, input) => {
           state.activeInterface = undefined;
           if (mode.stack.length > 2) {
-            applyModeChange("MODE_POP", input, mode.stack.slice(0, -2), timestamp);
+            applyModeChange("MODE_RESET", input, mode.stack.slice(0, -2), timestamp);
           } else {
             applyModeChange("MODE_RESET", input, ["exec"], timestamp);
           }
