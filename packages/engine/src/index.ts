@@ -349,7 +349,12 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
             .map((interfaceName) => {
               const iface = state.interfaces[interfaceName];
               const shutdownLine = iface.isShutdown ? " shutdown" : " no shutdown";
-              return `interface ${iface.name}\n description ${iface.description}\n${shutdownLine}`;
+              const lines = [`interface ${iface.name}`];
+              if (iface.description && iface.description.length > 0) {
+                lines.push(` description ${iface.description}`);
+              }
+              lines.push(shutdownLine);
+              return lines.join("\n");
             });
 
           emit({
