@@ -62,6 +62,8 @@ export interface EngineState {
   deviceConfig: {
     hostname: string;
   };
+  interfaces: Record<string, { name: string }>;
+  activeInterface?: string;
   lastInput?: string;
   lastEvent?: EngineEvent;
 }
@@ -112,6 +114,9 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
     if (activeMode === "config") {
       return `${hostname}(config)# `;
     }
+    if (activeMode === "config-if") {
+      return `${hostname}(config-if)# `;
+    }
     return `${hostname}> `;
   };
 
@@ -131,6 +136,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
     deviceConfig: {
       hostname: "packetforge",
     },
+    interfaces: {},
   };
   let tick = 0;
 
@@ -425,12 +431,105 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         },
       },
       {
+        key: "interface",
+        helpLabel: "interface <name>",
+        match: (input) => /^interface\s+\S+$/.test(input),
+        run: (timestamp, input) => {
+          const interfaceName = input.split(/\s+/, 2)[1];
+          if (!state.interfaces[interfaceName]) {
+            state.interfaces[interfaceName] = { name: interfaceName };
+          }
+          state.activeInterface = interfaceName;
+          appendAction({
+            type: "config/interface-select",
+            timestamp,
+            payload: { interface: interfaceName },
+          });
+          applyModeChange("MODE_PUSH", input, [...mode.stack, "config-if"], timestamp);
+        },
+      },
+      {
         key: "end",
         helpLabel: "end",
         match: (input) => input === "end",
         run: (timestamp, input) => {
           if (mode.stack.length > 1) {
             applyModeChange("MODE_POP", input, mode.stack.slice(0, -1), timestamp);
+          } else {
+            applyModeChange("MODE_RESET", input, ["exec"], timestamp);
+          }
+        },
+      },
+    ],
+    "config-if": [
+      {
+        key: "help",
+        helpLabel: "help",
+        match: (input) => input === "help",
+        run: (timestamp) => {
+          const activeMode = getActiveMode(mode.stack);
+          const commands = commandRegistry[activeMode] ?? [];
+          appendAction({ type: "command/help", timestamp });
+          emit({
+            type: "output/text",
+            text: `Available commands: ${commands.map((command) => command.helpLabel).join(", ")}`,
+            timestamp,
+          });
+        },
+      },
+      {
+        key: "echo",
+        helpLabel: "echo <text>",
+        match: (input) => input.startsWith("echo "),
+        run: (timestamp, input) => {
+          const text = input.slice(5);
+          appendAction({ type: "command/echo", timestamp, payload: { text } });
+          emit({ type: "output/text", text, timestamp });
+        },
+      },
+      {
+        key: "clear",
+        helpLabel: "clear",
+        match: (input) => input === "clear",
+        run: (timestamp) => {
+          appendAction({ type: "command/clear", timestamp });
+          emit({ type: "output/clear", timestamp });
+        },
+      },
+      {
+        key: "mode",
+        helpLabel: "mode",
+        match: (input) => input === "mode",
+        run: (timestamp) => {
+          appendAction({ type: "command/mode", timestamp });
+          emit({
+            type: "output/text",
+            text: `Mode stack: ${mode.stack.join(" > ")}`,
+            timestamp,
+          });
+        },
+      },
+      {
+        key: "exit",
+        helpLabel: "exit",
+        match: (input) => input === "exit",
+        run: (timestamp, input) => {
+          if (mode.stack.length === 1) {
+            return;
+          }
+
+          state.activeInterface = undefined;
+          applyModeChange("MODE_POP", input, mode.stack.slice(0, -1), timestamp);
+        },
+      },
+      {
+        key: "end",
+        helpLabel: "end",
+        match: (input) => input === "end",
+        run: (timestamp, input) => {
+          state.activeInterface = undefined;
+          if (mode.stack.length > 2) {
+            applyModeChange("MODE_RESET", input, mode.stack.slice(0, -2), timestamp);
           } else {
             applyModeChange("MODE_RESET", input, ["exec"], timestamp);
           }
@@ -476,6 +575,10 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         mode: { ...state.mode, stack: [...state.mode.stack] },
         modeStack: [...state.modeStack],
         deviceConfig: { ...state.deviceConfig },
+        interfaces: Object.fromEntries(
+          Object.entries(state.interfaces).map(([name, iface]) => [name, { ...iface }]),
+        ),
+        activeInterface: state.activeInterface,
       };
     },
     getModeStack() {
@@ -494,6 +597,10 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
           mode: { ...state.mode, stack: [...state.mode.stack] },
           modeStack: [...state.modeStack],
           deviceConfig: { ...state.deviceConfig },
+          interfaces: Object.fromEntries(
+            Object.entries(state.interfaces).map(([name, iface]) => [name, { ...iface }]),
+          ),
+          activeInterface: state.activeInterface,
         },
         lastInput: state.lastInput,
         lastEvent: state.lastEvent,
