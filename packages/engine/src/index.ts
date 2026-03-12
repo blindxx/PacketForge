@@ -62,7 +62,7 @@ export interface EngineState {
   deviceConfig: {
     hostname: string;
   };
-  interfaces: Record<string, { name: string }>;
+  interfaces: Record<string, { name: string; description: string; isShutdown: boolean }>;
   activeInterface?: string;
   lastInput?: string;
   lastEvent?: EngineEvent;
@@ -198,6 +198,14 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
   const emitModeUnavailable = (timestamp: number, command: string) => {
     appendAction({ type: "command/invalid-mode", timestamp, payload: { input: command } });
     emit({ type: "output/error", text: "% Command not available in this mode", timestamp });
+  };
+
+  const getActiveInterface = () => {
+    if (!state.activeInterface) {
+      return undefined;
+    }
+
+    return state.interfaces[state.activeInterface];
   };
 
   const commandRegistry: Record<EngineModeId, RegisteredCommand[]> = {
@@ -336,9 +344,24 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         match: (input) => input === "show running-config",
         run: (timestamp) => {
           appendAction({ type: "command/show-running-config", timestamp });
+          const interfaceBlocks = Object.keys(state.interfaces)
+            .sort((left, right) => left.localeCompare(right))
+            .map((interfaceName) => {
+              const iface = state.interfaces[interfaceName];
+              const lines = [`interface ${iface.name}`];
+              const description = (iface.description ?? "").trim();
+
+              if (description.length > 0) {
+                lines.push(` description ${description}`);
+              }
+
+              lines.push(iface.isShutdown ? " shutdown" : " no shutdown");
+              return lines.join("\n");
+            });
+
           emit({
             type: "output/text",
-            text: `hostname ${state.deviceConfig.hostname}`,
+            text: [`hostname ${state.deviceConfig.hostname}`, ...interfaceBlocks].join("\n"),
             timestamp,
           });
         },
@@ -437,7 +460,11 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         run: (timestamp, input) => {
           const interfaceName = input.split(/\s+/, 2)[1];
           if (!state.interfaces[interfaceName]) {
-            state.interfaces[interfaceName] = { name: interfaceName };
+            state.interfaces[interfaceName] = {
+              name: interfaceName,
+              description: "",
+              isShutdown: false,
+            };
           }
           state.activeInterface = interfaceName;
           appendAction({
@@ -506,6 +533,71 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
             type: "output/text",
             text: `Mode stack: ${mode.stack.join(" > ")}`,
             timestamp,
+          });
+        },
+      },
+      {
+        key: "description",
+        helpLabel: "description <text>",
+        match: (input) => /^description\s+\S.+$/.test(input),
+        run: (timestamp, input) => {
+          const iface = getActiveInterface();
+          if (!iface || !state.activeInterface) {
+            appendAction({ type: "config/interface-context-missing", timestamp, payload: { input } });
+            emit({ type: "output/error", text: "% Active interface context missing", timestamp });
+            return;
+          }
+
+          const description = input.slice("description ".length).trim();
+          iface.description = description;
+          appendAction({
+            type: "config/interface-description",
+            timestamp,
+            payload: { interface: state.activeInterface, description },
+          });
+        },
+      },
+      {
+        key: "shutdown",
+        helpLabel: "shutdown",
+        match: (input) => input === "shutdown",
+        run: (timestamp) => {
+          const iface = getActiveInterface();
+          if (!iface || !state.activeInterface) {
+            appendAction({ type: "config/interface-context-missing", timestamp, payload: { input: "shutdown" } });
+            emit({ type: "output/error", text: "% Active interface context missing", timestamp });
+            return;
+          }
+
+          iface.isShutdown = true;
+          appendAction({
+            type: "config/interface-shutdown",
+            timestamp,
+            payload: { interface: state.activeInterface, shutdown: "true" },
+          });
+        },
+      },
+      {
+        key: "no shutdown",
+        helpLabel: "no shutdown",
+        match: (input) => input === "no shutdown",
+        run: (timestamp) => {
+          const iface = getActiveInterface();
+          if (!iface || !state.activeInterface) {
+            appendAction({
+              type: "config/interface-context-missing",
+              timestamp,
+              payload: { input: "no shutdown" },
+            });
+            emit({ type: "output/error", text: "% Active interface context missing", timestamp });
+            return;
+          }
+
+          iface.isShutdown = false;
+          appendAction({
+            type: "config/interface-shutdown",
+            timestamp,
+            payload: { interface: state.activeInterface, shutdown: "false" },
           });
         },
       },
