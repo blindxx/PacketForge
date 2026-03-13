@@ -55,6 +55,12 @@ export interface EngineAction {
   payload?: Record<string, string>;
 }
 
+export interface InterfaceConfig {
+  name: string;
+  description: string;
+  isShutdown: boolean;
+}
+
 export interface EngineState {
   schemaVersion: 1;
   mode: ModeStackState;
@@ -62,7 +68,7 @@ export interface EngineState {
   deviceConfig: {
     hostname: string;
   };
-  interfaces: Record<string, { name: string; description: string; isShutdown: boolean }>;
+  interfaces: Partial<Record<string, InterfaceConfig>>;
   activeInterface?: string;
   lastInput?: string;
   lastEvent?: EngineEvent;
@@ -347,7 +353,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
           const interfaceBlocks = Object.keys(state.interfaces)
             .sort((left, right) => (left < right ? -1 : left > right ? 1 : 0))
             .map((interfaceName) => {
-              const iface = state.interfaces[interfaceName];
+              const iface = state.interfaces[interfaceName]!;
               const lines = [`interface ${iface.name}`];
               const description = (iface.description ?? "").trim();
 
@@ -669,7 +675,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         deviceConfig: { ...state.deviceConfig },
         interfaces: Object.fromEntries(
           Object.entries(state.interfaces).map(([name, iface]) => [name, { ...iface }]),
-        ),
+        ) as Partial<Record<string, InterfaceConfig>>,
         activeInterface: state.activeInterface,
       };
     },
@@ -691,7 +697,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
           deviceConfig: { ...state.deviceConfig },
           interfaces: Object.fromEntries(
             Object.entries(state.interfaces).map(([name, iface]) => [name, { ...iface }]),
-          ),
+          ) as Partial<Record<string, InterfaceConfig>>,
           activeInterface: state.activeInterface,
         },
         lastInput: state.lastInput,
