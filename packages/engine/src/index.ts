@@ -345,7 +345,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         run: (timestamp) => {
           appendAction({ type: "command/show-running-config", timestamp });
           const interfaceBlocks = Object.keys(state.interfaces)
-            .sort((left, right) => left.localeCompare(right))
+            .sort((left, right) => (left < right ? -1 : left > right ? 1 : 0))
             .map((interfaceName) => {
               const iface = state.interfaces[interfaceName];
               const lines = [`interface ${iface.name}`];
@@ -539,7 +539,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
       {
         key: "description",
         helpLabel: "description <text>",
-        match: (input) => /^description\s+\S.+$/.test(input),
+        match: (input) => /^description\s+\S.*$/.test(input),
         run: (timestamp, input) => {
           const iface = getActiveInterface();
           if (!iface || !state.activeInterface) {
