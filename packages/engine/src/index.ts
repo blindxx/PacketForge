@@ -638,6 +638,15 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
 
   const allRegisteredCommands = Object.values(commandRegistry).flat();
 
+  const cloneInterfaces = (
+    src: Partial<Record<string, InterfaceConfig>>,
+  ): Record<string, InterfaceConfig> =>
+    Object.fromEntries(
+      Object.entries(src)
+        .filter((entry): entry is [string, InterfaceConfig] => entry[1] !== undefined)
+        .map(([name, iface]) => [name, { ...iface }]),
+    );
+
   return {
     async processInput(input: string): Promise<void> {
       const normalizedInput = input.trim();
@@ -673,9 +682,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         mode: { ...state.mode, stack: [...state.mode.stack] },
         modeStack: [...state.modeStack],
         deviceConfig: { ...state.deviceConfig },
-        interfaces: Object.fromEntries(
-          Object.entries(state.interfaces).map(([name, iface]) => [name, { ...iface }]),
-        ) as Partial<Record<string, InterfaceConfig>>,
+        interfaces: cloneInterfaces(state.interfaces),
         activeInterface: state.activeInterface,
       };
     },
@@ -695,9 +702,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
           mode: { ...state.mode, stack: [...state.mode.stack] },
           modeStack: [...state.modeStack],
           deviceConfig: { ...state.deviceConfig },
-          interfaces: Object.fromEntries(
-            Object.entries(state.interfaces).map(([name, iface]) => [name, { ...iface }]),
-          ) as Partial<Record<string, InterfaceConfig>>,
+          interfaces: cloneInterfaces(state.interfaces),
           activeInterface: state.activeInterface,
         },
         lastInput: state.lastInput,
