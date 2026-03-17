@@ -350,10 +350,10 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         match: (input) => input === "show running-config",
         run: (timestamp) => {
           appendAction({ type: "command/show-running-config", timestamp });
-          const interfaceBlocks = Object.keys(state.interfaces)
-            .sort((left, right) => (left < right ? -1 : left > right ? 1 : 0))
-            .map((interfaceName) => {
-              const iface = state.interfaces[interfaceName]!;
+          const interfaceBlocks = Object.entries(state.interfaces)
+            .filter((entry): entry is [string, InterfaceConfig] => entry[1] != null)
+            .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+            .map(([, iface]) => {
               const lines = [`interface ${iface.name}`];
               const description = (iface.description ?? "").trim();
 
