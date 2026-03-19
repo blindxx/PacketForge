@@ -352,7 +352,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
           appendAction({ type: "command/show-running-config", timestamp });
           const interfaceBlocks = Object.entries(state.interfaces)
             .filter((entry): entry is [string, InterfaceConfig] => entry[1] != null)
-            .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+            .sort(([left], [right]) => left.localeCompare(right))
             .map(([, iface]) => {
               const lines = [`interface ${iface.name}`];
               const description = (iface.description ?? "").trim();
@@ -368,6 +368,32 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
           emit({
             type: "output/text",
             text: [`hostname ${state.deviceConfig.hostname}`, ...interfaceBlocks].join("\n"),
+            timestamp,
+          });
+        },
+      },
+      {
+        key: "show interfaces",
+        helpLabel: "show interfaces",
+        match: (input) => input === "show interfaces",
+        run: (timestamp) => {
+          appendAction({ type: "command/show-interfaces", timestamp });
+          const interfaceBlocks = Object.entries(state.interfaces)
+            .filter((entry): entry is [string, InterfaceConfig] => entry[1] != null)
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(([, iface]) => {
+              const description = (iface.description ?? "").trim();
+              const status = iface.isShutdown ? "down" : "up";
+              return [
+                `Interface ${iface.name}`,
+                `  Description: ${description.length > 0 ? description : "--"}`,
+                `  Status: ${status}`,
+              ].join("\n");
+            });
+
+          emit({
+            type: "output/text",
+            text: interfaceBlocks.join("\n\n"),
             timestamp,
           });
         },
