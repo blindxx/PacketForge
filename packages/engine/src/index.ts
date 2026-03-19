@@ -373,6 +373,32 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         },
       },
       {
+        key: "show interfaces",
+        helpLabel: "show interfaces",
+        match: (input) => input === "show interfaces",
+        run: (timestamp) => {
+          appendAction({ type: "command/show-interfaces", timestamp });
+          const interfaceBlocks = Object.entries(state.interfaces)
+            .filter((entry): entry is [string, InterfaceConfig] => entry[1] != null)
+            .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+            .map(([, iface]) => {
+              const description = (iface.description ?? "").trim();
+              const status = iface.isShutdown ? "down" : "up";
+              return [
+                `Interface ${iface.name}`,
+                `  Description: ${description.length > 0 ? description : "--"}`,
+                `  Status: ${status}`,
+              ].join("\n");
+            });
+
+          emit({
+            type: "output/text",
+            text: interfaceBlocks.join("\n\n"),
+            timestamp,
+          });
+        },
+      },
+      {
         key: "exit",
         helpLabel: "exit",
         match: (input) => input === "exit",
