@@ -352,7 +352,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
           appendAction({ type: "command/show-running-config", timestamp });
           const interfaceBlocks = Object.entries(state.interfaces)
             .filter((entry): entry is [string, InterfaceConfig] => entry[1] != null)
-            .sort(([left], [right]) => left.localeCompare(right))
+            .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
             .map(([, iface]) => {
               const lines = [`interface ${iface.name}`];
               const description = (iface.description ?? "").trim();
@@ -380,7 +380,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
           appendAction({ type: "command/show-interfaces", timestamp });
           const interfaceBlocks = Object.entries(state.interfaces)
             .filter((entry): entry is [string, InterfaceConfig] => entry[1] != null)
-            .sort(([left], [right]) => left.localeCompare(right))
+            .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
             .map(([, iface]) => {
               const description = (iface.description ?? "").trim();
               const status = iface.isShutdown ? "down" : "up";
