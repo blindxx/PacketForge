@@ -214,6 +214,21 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
     return state.interfaces[state.activeInterface];
   };
 
+  const getConfiguredInterfaces = () =>
+    Object.entries(state.interfaces)
+      .filter((entry): entry is [string, InterfaceConfig] => entry[1] != null)
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+
+  const renderInterfaceBlock = (iface: InterfaceConfig) => {
+    const description = (iface.description ?? "").trim();
+    const status = iface.isShutdown ? "down" : "up";
+    return [
+      `Interface ${iface.name}`,
+      `  Description: ${description.length > 0 ? description : "--"}`,
+      `  Status: ${status}`,
+    ].join("\n");
+  };
+
   const commandRegistry: Record<EngineModeId, RegisteredCommand[]> = {
     exec: [
       {
@@ -375,25 +390,36 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
       {
         key: "show interfaces",
         helpLabel: "show interfaces",
-        match: (input) => input === "show interfaces",
-        run: (timestamp) => {
+        match: (input) => /^show interfaces(?:\s+\S+)?$/.test(input),
+        run: (timestamp, input) => {
           appendAction({ type: "command/show-interfaces", timestamp });
-          const interfaceBlocks = Object.entries(state.interfaces)
-            .filter((entry): entry is [string, InterfaceConfig] => entry[1] != null)
-            .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-            .map(([, iface]) => {
-              const description = (iface.description ?? "").trim();
-              const status = iface.isShutdown ? "down" : "up";
-              return [
-                `Interface ${iface.name}`,
-                `  Description: ${description.length > 0 ? description : "--"}`,
-                `  Status: ${status}`,
-              ].join("\n");
+          const interfaceName = input.split(/\s+/, 3)[2];
+
+          if (interfaceName) {
+            const iface = state.interfaces[interfaceName];
+
+            if (!iface) {
+              emit({
+                type: "output/error",
+                text: "% Interface not found",
+                timestamp,
+              });
+              return;
+            }
+
+            emit({
+              type: "output/text",
+              text: renderInterfaceBlock(iface),
+              timestamp,
             });
+            return;
+          }
 
           emit({
             type: "output/text",
-            text: interfaceBlocks.join("\n\n"),
+            text: getConfiguredInterfaces()
+              .map(([, iface]) => renderInterfaceBlock(iface))
+              .join("\n\n"),
             timestamp,
           });
         },
