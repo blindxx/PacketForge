@@ -389,7 +389,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
       },
       {
         key: "show interfaces",
-        helpLabel: "show interfaces",
+        helpLabel: "show interfaces [<name>]",
         match: (input) => /^show interfaces(?:\s+\S+)?$/.test(input),
         run: (timestamp, input) => {
           appendAction({ type: "command/show-interfaces", timestamp });
