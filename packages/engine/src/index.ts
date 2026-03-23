@@ -214,6 +214,36 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
     return state.interfaces[state.activeInterface];
   };
 
+  const normalizeInterfaceName = (interfaceName: string) => {
+    const collapsedName = interfaceName.replace(/\s+/g, "").toLowerCase();
+
+    if (!collapsedName) {
+      return "";
+    }
+
+    if (collapsedName.startsWith("gigabitethernet")) {
+      return `gi${collapsedName.slice("gigabitethernet".length)}`;
+    }
+
+    return collapsedName;
+  };
+
+  const resolveInterface = (interfaceName: string) => {
+    const canonicalName = normalizeInterfaceName(interfaceName);
+
+    if (!canonicalName) {
+      return undefined;
+    }
+
+    const iface = state.interfaces[canonicalName];
+
+    if (!iface) {
+      return undefined;
+    }
+
+    return { canonicalName, iface };
+  };
+
   const getConfiguredInterfaces = () =>
     Object.entries(state.interfaces)
       .filter((entry): entry is [string, InterfaceConfig] => entry[1] != null)
@@ -396,9 +426,9 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
           const interfaceName = input.split(/\s+/, 3)[2];
 
           if (interfaceName) {
-            const iface = state.interfaces[interfaceName];
+            const resolvedInterface = resolveInterface(interfaceName);
 
-            if (!iface) {
+            if (!resolvedInterface) {
               emit({
                 type: "output/error",
                 text: "% Interface not found",
@@ -409,7 +439,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
 
             emit({
               type: "output/text",
-              text: renderInterfaceBlock(iface),
+              text: renderInterfaceBlock(resolvedInterface.iface),
               timestamp,
             });
             return;
@@ -517,18 +547,25 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         match: (input) => /^interface\s+\S+$/.test(input),
         run: (timestamp, input) => {
           const interfaceName = input.split(/\s+/, 2)[1];
-          if (!state.interfaces[interfaceName]) {
-            state.interfaces[interfaceName] = {
-              name: interfaceName,
-              description: "",
-              isShutdown: false,
-            };
+          const canonicalInterfaceName = normalizeInterfaceName(interfaceName);
+          const existingInterface = canonicalInterfaceName
+            ? state.interfaces[canonicalInterfaceName]
+            : undefined;
+
+          if (!canonicalInterfaceName || !existingInterface) {
+            emit({
+              type: "output/error",
+              text: "% Interface not found",
+              timestamp,
+            });
+            return;
           }
-          state.activeInterface = interfaceName;
+
+          state.activeInterface = canonicalInterfaceName;
           appendAction({
             type: "config/interface-select",
             timestamp,
-            payload: { interface: interfaceName },
+            payload: { interface: canonicalInterfaceName },
           });
           applyModeChange("MODE_PUSH", input, [...mode.stack, "config-if"], timestamp);
         },
