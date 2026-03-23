@@ -214,22 +214,43 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
     return state.interfaces[state.activeInterface];
   };
 
-  const normalizeInterfaceName = (interfaceName: string) => {
-    const collapsedName = interfaceName.replace(/\s+/g, "").toLowerCase();
-
-    if (!collapsedName) {
-      return "";
-    }
-
-    if (collapsedName.startsWith("gigabitethernet")) {
-      return `gi${collapsedName.slice("gigabitethernet".length)}`;
-    }
-
-    return collapsedName;
+  type ResolvedInterface = {
+    key: string;
+    canonicalName?: string;
+    iface?: InterfaceConfig;
   };
 
-  const resolveInterface = (interfaceName: string) => {
-    const canonicalName = normalizeInterfaceName(interfaceName);
+  const normalizeInterfaceName = (interfaceName: string) => {
+    const collapsedName = interfaceName.trim().replace(/\s+/g, "");
+
+    if (!collapsedName) {
+      return undefined;
+    }
+
+    const longFormMatch = /^gigabitethernet(\d+\/\d+)$/i.exec(collapsedName);
+
+    if (longFormMatch) {
+      return `gi${longFormMatch[1]}`;
+    }
+
+    const shortFormMatch = /^gi(\d+\/\d+)$/i.exec(collapsedName);
+
+    if (shortFormMatch) {
+      return `gi${shortFormMatch[1]}`;
+    }
+
+    return undefined;
+  };
+
+  const resolveInterface = (interfaceName: string): ResolvedInterface | undefined => {
+    const exactName = interfaceName.trim();
+    const exactMatch = state.interfaces[exactName];
+
+    if (exactMatch) {
+      return { key: exactName, iface: exactMatch, canonicalName: normalizeInterfaceName(exactName) };
+    }
+
+    const canonicalName = normalizeInterfaceName(exactName);
 
     if (!canonicalName) {
       return undefined;
@@ -238,10 +259,10 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
     const iface = state.interfaces[canonicalName];
 
     if (!iface) {
-      return undefined;
+      return { key: canonicalName, canonicalName };
     }
 
-    return { canonicalName, iface };
+    return { key: canonicalName, iface, canonicalName };
   };
 
   const getConfiguredInterfaces = () =>
@@ -428,7 +449,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
           if (interfaceName) {
             const resolvedInterface = resolveInterface(interfaceName);
 
-            if (!resolvedInterface) {
+            if (!resolvedInterface?.iface) {
               emit({
                 type: "output/error",
                 text: "% Interface not found",
@@ -547,12 +568,12 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         match: (input) => /^interface\s+\S+$/.test(input),
         run: (timestamp, input) => {
           const interfaceName = input.split(/\s+/, 2)[1];
-          const canonicalInterfaceName = normalizeInterfaceName(interfaceName);
-          const existingInterface = canonicalInterfaceName
-            ? state.interfaces[canonicalInterfaceName]
-            : undefined;
+          const resolvedInterface = resolveInterface(interfaceName);
+          const interfaceKey = resolvedInterface?.iface
+            ? resolvedInterface.key
+            : resolvedInterface?.canonicalName;
 
-          if (!canonicalInterfaceName || !existingInterface) {
+          if (!interfaceKey) {
             emit({
               type: "output/error",
               text: "% Interface not found",
@@ -561,11 +582,19 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
             return;
           }
 
-          state.activeInterface = canonicalInterfaceName;
+          if (!state.interfaces[interfaceKey]) {
+            state.interfaces[interfaceKey] = {
+              name: interfaceKey,
+              description: "",
+              isShutdown: false,
+            };
+          }
+
+          state.activeInterface = interfaceKey;
           appendAction({
             type: "config/interface-select",
             timestamp,
-            payload: { interface: canonicalInterfaceName },
+            payload: { interface: interfaceKey },
           });
           applyModeChange("MODE_PUSH", input, [...mode.stack, "config-if"], timestamp);
         },
