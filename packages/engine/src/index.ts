@@ -220,8 +220,10 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
     iface?: InterfaceConfig;
   };
 
+  const collapseInterfaceKey = (interfaceName: string) => interfaceName.trim().replace(/\s+/g, "");
+
   const normalizeInterfaceName = (interfaceName: string) => {
-    const collapsedName = interfaceName.trim().replace(/\s+/g, "");
+    const collapsedName = collapseInterfaceKey(interfaceName);
 
     if (!collapsedName) {
       return undefined;
@@ -244,6 +246,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
 
   const resolveInterface = (interfaceName: string): ResolvedInterface | undefined => {
     const exactName = interfaceName.trim();
+    const collapsedFallbackKey = collapseInterfaceKey(interfaceName);
 
     if (!exactName) {
       return undefined;
@@ -258,7 +261,13 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
     const canonicalName = normalizeInterfaceName(exactName);
 
     if (!canonicalName) {
-      return { key: exactName };
+      const fallbackMatch = state.interfaces[collapsedFallbackKey];
+
+      if (fallbackMatch) {
+        return { key: collapsedFallbackKey, iface: fallbackMatch };
+      }
+
+      return { key: collapsedFallbackKey };
     }
 
     const canonicalMatch = state.interfaces[canonicalName];
