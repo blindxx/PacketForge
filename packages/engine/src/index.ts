@@ -244,6 +244,11 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
 
   const resolveInterface = (interfaceName: string): ResolvedInterface | undefined => {
     const exactName = interfaceName.trim();
+
+    if (!exactName) {
+      return undefined;
+    }
+
     const exactMatch = state.interfaces[exactName];
 
     if (exactMatch) {
@@ -253,7 +258,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
     const canonicalName = normalizeInterfaceName(exactName);
 
     if (!canonicalName) {
-      return undefined;
+      return { key: exactName };
     }
 
     const iface = state.interfaces[canonicalName];
@@ -571,7 +576,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
           const resolvedInterface = resolveInterface(interfaceName);
           const interfaceKey = resolvedInterface?.iface
             ? resolvedInterface.key
-            : resolvedInterface?.canonicalName;
+            : resolvedInterface?.canonicalName ?? resolvedInterface?.key;
 
           if (!interfaceKey) {
             emit({
