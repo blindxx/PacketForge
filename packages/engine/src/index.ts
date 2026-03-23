@@ -227,13 +227,13 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
       return undefined;
     }
 
-    const longFormMatch = /^gigabitethernet(\d+\/\d+)$/i.exec(collapsedName);
+    const longFormMatch = /^gigabitethernet(\d+(?:\/\d+)+)$/i.exec(collapsedName);
 
     if (longFormMatch) {
       return `gi${longFormMatch[1]}`;
     }
 
-    const shortFormMatch = /^gi(\d+\/\d+)$/i.exec(collapsedName);
+    const shortFormMatch = /^gi(\d+(?:\/\d+)+)$/i.exec(collapsedName);
 
     if (shortFormMatch) {
       return `gi${shortFormMatch[1]}`;
@@ -261,13 +261,26 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
       return { key: exactName };
     }
 
-    const iface = state.interfaces[canonicalName];
+    const canonicalMatch = state.interfaces[canonicalName];
 
-    if (!iface) {
-      return { key: canonicalName, canonicalName };
+    if (canonicalMatch) {
+      return { key: canonicalName, iface: canonicalMatch, canonicalName };
     }
 
-    return { key: canonicalName, iface, canonicalName };
+    const normalizedEquivalentMatch = Object.entries(state.interfaces)
+      .filter((entry): entry is [string, InterfaceConfig] => entry[1] != null)
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .find(([storedName]) => normalizeInterfaceName(storedName) === canonicalName);
+
+    if (normalizedEquivalentMatch) {
+      return {
+        key: normalizedEquivalentMatch[0],
+        iface: normalizedEquivalentMatch[1],
+        canonicalName,
+      };
+    }
+
+    return { key: canonicalName, canonicalName };
   };
 
   const getConfiguredInterfaces = () =>
@@ -446,10 +459,10 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
       {
         key: "show interfaces",
         helpLabel: "show interfaces [<name>]",
-        match: (input) => /^show interfaces(?:\s+\S+)?$/.test(input),
+        match: (input) => /^show interfaces(?:\s+.+)?$/.test(input),
         run: (timestamp, input) => {
           appendAction({ type: "command/show-interfaces", timestamp });
-          const interfaceName = input.split(/\s+/, 3)[2];
+          const interfaceName = input.slice("show interfaces".length).trim();
 
           if (interfaceName) {
             const resolvedInterface = resolveInterface(interfaceName);
@@ -570,9 +583,9 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
       {
         key: "interface",
         helpLabel: "interface <name>",
-        match: (input) => /^interface\s+\S+$/.test(input),
+        match: (input) => /^interface\s+.+$/.test(input),
         run: (timestamp, input) => {
-          const interfaceName = input.split(/\s+/, 2)[1];
+          const interfaceName = input.slice("interface".length).trim();
           const resolvedInterface = resolveInterface(interfaceName);
           const interfaceKey = resolvedInterface?.iface
             ? resolvedInterface.key
