@@ -276,10 +276,25 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
       return { key: canonicalName, iface: canonicalMatch, canonicalName };
     }
 
-    const normalizedEquivalentMatch = Object.entries(state.interfaces)
-      .filter((entry): entry is [string, InterfaceConfig] => entry[1] != null)
-      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-      .find(([storedName]) => normalizeInterfaceName(storedName) === canonicalName);
+    let normalizedEquivalentMatch: [string, InterfaceConfig] | undefined;
+
+    Object.entries(state.interfaces).forEach((entry) => {
+      if (entry[1] == null || normalizeInterfaceName(entry[0]) !== canonicalName) {
+        return;
+      }
+
+      if (!normalizedEquivalentMatch) {
+        normalizedEquivalentMatch = [entry[0], entry[1]];
+        return;
+      }
+
+      const [bestName] = normalizedEquivalentMatch;
+      const comparison = entry[0] < bestName ? -1 : entry[0] > bestName ? 1 : 0;
+
+      if (comparison < 0) {
+        normalizedEquivalentMatch = [entry[0], entry[1]];
+      }
+    });
 
     if (normalizedEquivalentMatch) {
       return {
