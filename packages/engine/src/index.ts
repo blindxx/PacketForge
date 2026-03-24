@@ -226,10 +226,22 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
     !/\s/.test(interfaceName.trim()) || /^(?:gi|gigabitethernet)\s+\d+(?:\/\d+)+$/i.test(interfaceName.trim());
 
   const formatInterfaceDisplayName = (interfaceName: string) => {
-    const gigabitMatch = /^gi(\d+(?:\/\d+)+)$/i.exec(interfaceName);
+    const gigabitMatch = /^gi(.+)$/i.exec(interfaceName);
 
     if (gigabitMatch) {
       return `GigabitEthernet${gigabitMatch[1]}`;
+    }
+
+    const fastEthernetMatch = /^fa(.+)$/i.exec(interfaceName);
+
+    if (fastEthernetMatch) {
+      return `FastEthernet${fastEthernetMatch[1]}`;
+    }
+
+    const tenGigabitMatch = /^te(.+)$/i.exec(interfaceName);
+
+    if (tenGigabitMatch) {
+      return `TenGigabitEthernet${tenGigabitMatch[1]}`;
     }
 
     return interfaceName;
