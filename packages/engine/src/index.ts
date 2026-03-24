@@ -222,6 +222,19 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
 
   const collapseInterfaceKey = (interfaceName: string) => interfaceName.trim().replace(/\s+/g, "");
 
+  const isSpacedInterfaceInputAllowed = (interfaceName: string) =>
+    !/\s/.test(interfaceName.trim()) || /^(?:gi|gigabitethernet)\s+\d+(?:\/\d+)+$/i.test(interfaceName.trim());
+
+  const formatInterfaceDisplayName = (interfaceName: string) => {
+    const gigabitMatch = /^gi(\d+(?:\/\d+)+)$/i.exec(interfaceName);
+
+    if (gigabitMatch) {
+      return `GigabitEthernet${gigabitMatch[1]}`;
+    }
+
+    return interfaceName;
+  };
+
   const normalizeInterfaceName = (interfaceName: string) => {
     const collapsedName = collapseInterfaceKey(interfaceName);
 
@@ -316,7 +329,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
     const description = (iface.description ?? "").trim();
     const status = iface.isShutdown ? "down" : "up";
     return [
-      `Interface ${iface.name}`,
+      `Interface ${formatInterfaceDisplayName(iface.name)}`,
       `  Description: ${description.length > 0 ? description : "--"}`,
       `  Status: ${status}`,
     ].join("\n");
@@ -462,7 +475,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
             .filter((entry): entry is [string, InterfaceConfig] => entry[1] != null)
             .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
             .map(([, iface]) => {
-              const lines = [`interface ${iface.name}`];
+              const lines = [`interface ${formatInterfaceDisplayName(iface.name)}`];
               const description = (iface.description ?? "").trim();
 
               if (description.length > 0) {
@@ -489,6 +502,15 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
           const interfaceName = input.slice("show interfaces".length).trim();
 
           if (interfaceName) {
+            if (!isSpacedInterfaceInputAllowed(interfaceName)) {
+              emit({
+                type: "output/error",
+                text: "% Interface not found",
+                timestamp,
+              });
+              return;
+            }
+
             const resolvedInterface = resolveInterface(interfaceName);
 
             if (!resolvedInterface?.iface) {
@@ -610,6 +632,16 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         match: (input) => /^interface\s+.+$/.test(input),
         run: (timestamp, input) => {
           const interfaceName = input.slice("interface".length).trim();
+
+          if (!isSpacedInterfaceInputAllowed(interfaceName)) {
+            emit({
+              type: "output/error",
+              text: "% Interface not found",
+              timestamp,
+            });
+            return;
+          }
+
           const resolvedInterface = resolveInterface(interfaceName);
           const interfaceKey = resolvedInterface?.iface
             ? resolvedInterface.key
