@@ -214,6 +214,137 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
     return state.interfaces[state.activeInterface];
   };
 
+  type ResolvedInterface = {
+    key: string;
+    canonicalName?: string;
+    iface?: InterfaceConfig;
+  };
+
+  const collapseInterfaceKey = (interfaceName: string) => interfaceName.trim().replace(/\s+/g, "");
+
+  const isSpacedInterfaceInputAllowed = (interfaceName: string) =>
+    /^(?:gi|gigabitethernet|fa|fastethernet|te|tengigabitethernet)\s+\d+(?:\/\d+)+$/i.test(
+      interfaceName.trim(),
+    );
+
+  const isInterfaceNameInputAllowed = (interfaceName: string) =>
+    !/\s/.test(interfaceName.trim()) || isSpacedInterfaceInputAllowed(interfaceName);
+
+  const formatInterfaceDisplayName = (interfaceName: string) => {
+    const gigabitMatch = /^gi(\d+(?:\/\d+)+)$/i.exec(interfaceName);
+
+    if (gigabitMatch) {
+      return `GigabitEthernet${gigabitMatch[1]}`;
+    }
+
+    const fastEthernetMatch = /^fa(\d+(?:\/\d+)+)$/i.exec(interfaceName);
+
+    if (fastEthernetMatch) {
+      return `FastEthernet${fastEthernetMatch[1]}`;
+    }
+
+    const tenGigabitMatch = /^te(\d+(?:\/\d+)+)$/i.exec(interfaceName);
+
+    if (tenGigabitMatch) {
+      return `TenGigabitEthernet${tenGigabitMatch[1]}`;
+    }
+
+    return interfaceName;
+  };
+
+  const normalizeInterfaceName = (interfaceName: string) => {
+    const collapsedName = collapseInterfaceKey(interfaceName);
+
+    if (!collapsedName) {
+      return undefined;
+    }
+
+    const familyPatterns: Array<{ short: string; long: string }> = [
+      { short: "gi", long: "gigabitethernet" },
+      { short: "fa", long: "fastethernet" },
+      { short: "te", long: "tengigabitethernet" },
+    ];
+
+    for (const family of familyPatterns) {
+      const longFormMatch = new RegExp(`^${family.long}(\\d+(?:\\/\\d+)+)$`, "i").exec(collapsedName);
+
+      if (longFormMatch) {
+        return `${family.short}${longFormMatch[1]}`;
+      }
+
+      const shortFormMatch = new RegExp(`^${family.short}(\\d+(?:\\/\\d+)+)$`, "i").exec(collapsedName);
+
+      if (shortFormMatch) {
+        return `${family.short}${shortFormMatch[1]}`;
+      }
+    }
+
+    return undefined;
+  };
+
+  const resolveInterface = (interfaceName: string): ResolvedInterface | undefined => {
+    const exactName = interfaceName.trim();
+    const collapsedFallbackKey = collapseInterfaceKey(interfaceName);
+
+    if (!exactName) {
+      return undefined;
+    }
+
+    const exactMatch = state.interfaces[exactName];
+
+    if (exactMatch) {
+      return { key: exactName, iface: exactMatch, canonicalName: normalizeInterfaceName(exactName) };
+    }
+
+    const canonicalName = normalizeInterfaceName(exactName);
+
+    if (!canonicalName) {
+      const fallbackMatch = state.interfaces[collapsedFallbackKey];
+
+      if (fallbackMatch) {
+        return { key: collapsedFallbackKey, iface: fallbackMatch };
+      }
+
+      return { key: collapsedFallbackKey };
+    }
+
+    const canonicalMatch = state.interfaces[canonicalName];
+
+    if (canonicalMatch) {
+      return { key: canonicalName, iface: canonicalMatch, canonicalName };
+    }
+
+    let normalizedEquivalentMatch: [string, InterfaceConfig] | undefined;
+
+    Object.entries(state.interfaces).forEach((entry) => {
+      if (entry[1] == null || normalizeInterfaceName(entry[0]) !== canonicalName) {
+        return;
+      }
+
+      if (!normalizedEquivalentMatch) {
+        normalizedEquivalentMatch = [entry[0], entry[1]];
+        return;
+      }
+
+      const [bestName] = normalizedEquivalentMatch;
+      const comparison = entry[0] < bestName ? -1 : entry[0] > bestName ? 1 : 0;
+
+      if (comparison < 0) {
+        normalizedEquivalentMatch = [entry[0], entry[1]];
+      }
+    });
+
+    if (normalizedEquivalentMatch) {
+      return {
+        key: normalizedEquivalentMatch[0],
+        iface: normalizedEquivalentMatch[1],
+        canonicalName,
+      };
+    }
+
+    return { key: canonicalName, canonicalName };
+  };
+
   const getConfiguredInterfaces = () =>
     Object.entries(state.interfaces)
       .filter((entry): entry is [string, InterfaceConfig] => entry[1] != null)
@@ -223,7 +354,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
     const description = (iface.description ?? "").trim();
     const status = iface.isShutdown ? "down" : "up";
     return [
-      `Interface ${iface.name}`,
+      `Interface ${formatInterfaceDisplayName(iface.name)}`,
       `  Description: ${description.length > 0 ? description : "--"}`,
       `  Status: ${status}`,
     ].join("\n");
@@ -369,7 +500,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
             .filter((entry): entry is [string, InterfaceConfig] => entry[1] != null)
             .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
             .map(([, iface]) => {
-              const lines = [`interface ${iface.name}`];
+              const lines = [`interface ${formatInterfaceDisplayName(iface.name)}`];
               const description = (iface.description ?? "").trim();
 
               if (description.length > 0) {
@@ -390,15 +521,26 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
       {
         key: "show interfaces",
         helpLabel: "show interfaces [<name>]",
-        match: (input) => /^show interfaces(?:\s+\S+)?$/.test(input),
+        match: (input) => {
+          if (input === "show interfaces") {
+            return true;
+          }
+
+          if (!input.startsWith("show interfaces ")) {
+            return false;
+          }
+
+          const interfaceName = input.slice("show interfaces".length).trim();
+          return isInterfaceNameInputAllowed(interfaceName);
+        },
         run: (timestamp, input) => {
           appendAction({ type: "command/show-interfaces", timestamp });
-          const interfaceName = input.split(/\s+/, 3)[2];
+          const interfaceName = input.slice("show interfaces".length).trim();
 
           if (interfaceName) {
-            const iface = state.interfaces[interfaceName];
+            const resolvedInterface = resolveInterface(interfaceName);
 
-            if (!iface) {
+            if (!resolvedInterface?.iface) {
               emit({
                 type: "output/error",
                 text: "% Interface not found",
@@ -409,7 +551,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
 
             emit({
               type: "output/text",
-              text: renderInterfaceBlock(iface),
+              text: renderInterfaceBlock(resolvedInterface.iface),
               timestamp,
             });
             return;
@@ -514,21 +656,43 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
       {
         key: "interface",
         helpLabel: "interface <name>",
-        match: (input) => /^interface\s+\S+$/.test(input),
+        match: (input) => {
+          if (!input.startsWith("interface ")) {
+            return false;
+          }
+
+          const interfaceName = input.slice("interface".length).trim();
+          return isInterfaceNameInputAllowed(interfaceName);
+        },
         run: (timestamp, input) => {
-          const interfaceName = input.split(/\s+/, 2)[1];
-          if (!state.interfaces[interfaceName]) {
-            state.interfaces[interfaceName] = {
-              name: interfaceName,
+          const interfaceName = input.slice("interface".length).trim();
+          const resolvedInterface = resolveInterface(interfaceName);
+          const interfaceKey = resolvedInterface?.iface
+            ? resolvedInterface.key
+            : resolvedInterface?.canonicalName ?? resolvedInterface?.key;
+
+          if (!interfaceKey) {
+            emit({
+              type: "output/error",
+              text: "% Interface not found",
+              timestamp,
+            });
+            return;
+          }
+
+          if (!state.interfaces[interfaceKey]) {
+            state.interfaces[interfaceKey] = {
+              name: interfaceKey,
               description: "",
               isShutdown: false,
             };
           }
-          state.activeInterface = interfaceName;
+
+          state.activeInterface = interfaceKey;
           appendAction({
             type: "config/interface-select",
             timestamp,
-            payload: { interface: interfaceName },
+            payload: { interface: interfaceKey },
           });
           applyModeChange("MODE_PUSH", input, [...mode.stack, "config-if"], timestamp);
         },
