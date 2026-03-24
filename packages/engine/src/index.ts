@@ -259,16 +259,24 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
       return undefined;
     }
 
-    const longFormMatch = /^gigabitethernet(\d+(?:\/\d+)+)$/i.exec(collapsedName);
+    const familyPatterns: Array<{ short: string; long: string }> = [
+      { short: "gi", long: "gigabitethernet" },
+      { short: "fa", long: "fastethernet" },
+      { short: "te", long: "tengigabitethernet" },
+    ];
 
-    if (longFormMatch) {
-      return `gi${longFormMatch[1]}`;
-    }
+    for (const family of familyPatterns) {
+      const longFormMatch = new RegExp(`^${family.long}(\\d+(?:\\/\\d+)+)$`, "i").exec(collapsedName);
 
-    const shortFormMatch = /^gi(\d+(?:\/\d+)+)$/i.exec(collapsedName);
+      if (longFormMatch) {
+        return `${family.short}${longFormMatch[1]}`;
+      }
 
-    if (shortFormMatch) {
-      return `gi${shortFormMatch[1]}`;
+      const shortFormMatch = new RegExp(`^${family.short}(\\d+(?:\\/\\d+)+)$`, "i").exec(collapsedName);
+
+      if (shortFormMatch) {
+        return `${family.short}${shortFormMatch[1]}`;
+      }
     }
 
     return undefined;
