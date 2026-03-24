@@ -223,22 +223,27 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
   const collapseInterfaceKey = (interfaceName: string) => interfaceName.trim().replace(/\s+/g, "");
 
   const isSpacedInterfaceInputAllowed = (interfaceName: string) =>
-    !/\s/.test(interfaceName.trim()) || /^(?:gi|gigabitethernet)\s+\d+(?:\/\d+)+$/i.test(interfaceName.trim());
+    /^(?:gi|gigabitethernet|fa|fastethernet|te|tengigabitethernet)\s+\d+(?:\/\d+)+$/i.test(
+      interfaceName.trim(),
+    );
+
+  const isInterfaceNameInputAllowed = (interfaceName: string) =>
+    !/\s/.test(interfaceName.trim()) || isSpacedInterfaceInputAllowed(interfaceName);
 
   const formatInterfaceDisplayName = (interfaceName: string) => {
-    const gigabitMatch = /^gi(.+)$/i.exec(interfaceName);
+    const gigabitMatch = /^gi(\d+(?:\/\d+)+)$/i.exec(interfaceName);
 
     if (gigabitMatch) {
       return `GigabitEthernet${gigabitMatch[1]}`;
     }
 
-    const fastEthernetMatch = /^fa(.+)$/i.exec(interfaceName);
+    const fastEthernetMatch = /^fa(\d+(?:\/\d+)+)$/i.exec(interfaceName);
 
     if (fastEthernetMatch) {
       return `FastEthernet${fastEthernetMatch[1]}`;
     }
 
-    const tenGigabitMatch = /^te(.+)$/i.exec(interfaceName);
+    const tenGigabitMatch = /^te(\d+(?:\/\d+)+)$/i.exec(interfaceName);
 
     if (tenGigabitMatch) {
       return `TenGigabitEthernet${tenGigabitMatch[1]}`;
@@ -508,21 +513,23 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
       {
         key: "show interfaces",
         helpLabel: "show interfaces [<name>]",
-        match: (input) => /^show interfaces(?:\s+.+)?$/.test(input),
+        match: (input) => {
+          if (input === "show interfaces") {
+            return true;
+          }
+
+          if (!input.startsWith("show interfaces ")) {
+            return false;
+          }
+
+          const interfaceName = input.slice("show interfaces".length).trim();
+          return isInterfaceNameInputAllowed(interfaceName);
+        },
         run: (timestamp, input) => {
           appendAction({ type: "command/show-interfaces", timestamp });
           const interfaceName = input.slice("show interfaces".length).trim();
 
           if (interfaceName) {
-            if (!isSpacedInterfaceInputAllowed(interfaceName)) {
-              emit({
-                type: "output/error",
-                text: "% Interface not found",
-                timestamp,
-              });
-              return;
-            }
-
             const resolvedInterface = resolveInterface(interfaceName);
 
             if (!resolvedInterface?.iface) {
@@ -641,19 +648,16 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
       {
         key: "interface",
         helpLabel: "interface <name>",
-        match: (input) => /^interface\s+.+$/.test(input),
-        run: (timestamp, input) => {
-          const interfaceName = input.slice("interface".length).trim();
-
-          if (!isSpacedInterfaceInputAllowed(interfaceName)) {
-            emit({
-              type: "output/error",
-              text: "% Interface not found",
-              timestamp,
-            });
-            return;
+        match: (input) => {
+          if (!input.startsWith("interface ")) {
+            return false;
           }
 
+          const interfaceName = input.slice("interface".length).trim();
+          return isInterfaceNameInputAllowed(interfaceName);
+        },
+        run: (timestamp, input) => {
+          const interfaceName = input.slice("interface".length).trim();
           const resolvedInterface = resolveInterface(interfaceName);
           const interfaceKey = resolvedInterface?.iface
             ? resolvedInterface.key
