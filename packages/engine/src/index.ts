@@ -224,7 +224,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
 
   const sanitizeInterfaceInput = (interfaceName: string) => interfaceName.trim().replace(/\s+/g, " ").toLowerCase();
 
-  const collapseInterfaceKey = (interfaceName: string) => sanitizeInterfaceInput(interfaceName);
+  const collapseInterfaceKey = (interfaceName: string) => sanitizeInterfaceInput(interfaceName).replace(/\s+/g, "");
 
   const parseInterfaceFamilyAndSuffix = (interfaceName: string) => {
     const sanitizedInput = sanitizeInterfaceInput(interfaceName);
