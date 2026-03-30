@@ -228,7 +228,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
 
   const parseInterfaceFamilyAndSuffix = (interfaceName: string) => {
     const sanitizedInput = sanitizeInterfaceInput(interfaceName);
-    const shortFormMatch = /^(gi|fa|te)(\d+(?:\/\d+)+)$/.exec(sanitizedInput);
+    const shortFormMatch = /^(gi|fa|te)\s?(\d+(?:\/\d+)+)$/.exec(sanitizedInput);
 
     if (shortFormMatch) {
       return {
