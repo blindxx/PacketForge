@@ -224,7 +224,38 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
 
   const sanitizeInterfaceInput = (interfaceName: string) => interfaceName.trim().replace(/\s+/g, " ").toLowerCase();
 
-  const collapseInterfaceKey = (interfaceName: string) => sanitizeInterfaceInput(interfaceName).replace(/\s+/g, "");
+  const collapseInterfaceKey = (interfaceName: string) => sanitizeInterfaceInput(interfaceName);
+
+  const parseInterfaceFamilyAndSuffix = (interfaceName: string) => {
+    const sanitizedInput = sanitizeInterfaceInput(interfaceName);
+    const shortFormMatch = /^(gi|fa|te)(\d+(?:\/\d+)+)$/.exec(sanitizedInput);
+
+    if (shortFormMatch) {
+      return {
+        family: shortFormMatch[1] as "gi" | "fa" | "te",
+        suffix: shortFormMatch[2],
+      };
+    }
+
+    const longFormMatch = /^(gigabitethernet|fastethernet|tengigabitethernet)(?: ?)(\d+(?:\/\d+)+)$/.exec(
+      sanitizedInput,
+    );
+
+    if (!longFormMatch) {
+      return undefined;
+    }
+
+    const longFamilyToShort: Record<string, "gi" | "fa" | "te"> = {
+      gigabitethernet: "gi",
+      fastethernet: "fa",
+      tengigabitethernet: "te",
+    };
+
+    return {
+      family: longFamilyToShort[longFormMatch[1]],
+      suffix: longFormMatch[2],
+    };
+  };
 
   const isInterfaceNameValid = (interfaceName: string) =>
     /^(?:gi|fa|te)\d+(?:\/\d+)+$/.test(interfaceName);
@@ -252,33 +283,13 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
   };
 
   const normalizeInterfaceName = (interfaceName: string) => {
-    const collapsedName = collapseInterfaceKey(interfaceName);
+    const parsed = parseInterfaceFamilyAndSuffix(interfaceName);
 
-    if (!collapsedName) {
+    if (!parsed) {
       return undefined;
     }
 
-    const familyPatterns: Array<{ short: string; long: string }> = [
-      { short: "gi", long: "gigabitethernet" },
-      { short: "fa", long: "fastethernet" },
-      { short: "te", long: "tengigabitethernet" },
-    ];
-
-    for (const family of familyPatterns) {
-      const longFormMatch = new RegExp(`^${family.long}(\\d+(?:\\/\\d+)+)$`, "i").exec(collapsedName);
-
-      if (longFormMatch) {
-        return `${family.short}${longFormMatch[1]}`;
-      }
-
-      const shortFormMatch = new RegExp(`^${family.short}(\\d+(?:\\/\\d+)+)$`, "i").exec(collapsedName);
-
-      if (shortFormMatch) {
-        return `${family.short}${shortFormMatch[1]}`;
-      }
-    }
-
-    return undefined;
+    return `${parsed.family}${parsed.suffix}`;
   };
 
   const resolveInterface = (interfaceName: string): ResolvedInterface | undefined => {
