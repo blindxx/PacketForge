@@ -882,8 +882,10 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
   const allRegisteredCommands = Object.values(commandRegistry).flat();
 
   const resolveAbbreviatedInput = (input: string, modeCommands: RegisteredCommand[]) => {
-    const inputTokens = input.split(/\s+/);
-    const [rawCommandToken] = inputTokens;
+    const firstWhitespaceIndex = input.search(/\s/);
+    const hasRemainder = firstWhitespaceIndex >= 0;
+    const rawCommandToken = hasRemainder ? input.slice(0, firstWhitespaceIndex) : input;
+    const inputRemainder = hasRemainder ? input.slice(firstWhitespaceIndex) : "";
 
     if (!rawCommandToken) {
       return { type: "unresolved" as const };
@@ -909,7 +911,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
 
     return {
       type: "resolved" as const,
-      input: [matchingCommandTokens[0], ...inputTokens.slice(1)].join(" "),
+      input: `${matchingCommandTokens[0]}${inputRemainder}`,
     };
   };
 
