@@ -220,6 +220,8 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
     iface?: InterfaceConfig;
   };
 
+  const INVALID_INTERFACE_NAME_ERROR = "% Invalid interface name";
+
   const collapseInterfaceKey = (interfaceName: string) => interfaceName.trim().replace(/\s+/g, "");
 
   const isSpacedInterfaceInputAllowed = (interfaceName: string) =>
@@ -229,6 +231,8 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
 
   const isInterfaceNameInputAllowed = (interfaceName: string) =>
     !/\s/.test(interfaceName.trim()) || isSpacedInterfaceInputAllowed(interfaceName);
+
+  const isInterfaceNameValid = (interfaceName: string) => normalizeInterfaceName(interfaceName) !== undefined;
 
   const formatInterfaceDisplayName = (interfaceName: string) => {
     const gigabitMatch = /^gi(\d+(?:\/\d+)+)$/i.exec(interfaceName);
@@ -526,18 +530,22 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
             return true;
           }
 
-          if (!input.startsWith("show interfaces ")) {
-            return false;
-          }
-
-          const interfaceName = input.slice("show interfaces".length).trim();
-          return isInterfaceNameInputAllowed(interfaceName);
+          return input.startsWith("show interfaces ");
         },
         run: (timestamp, input) => {
           appendAction({ type: "command/show-interfaces", timestamp });
           const interfaceName = input.slice("show interfaces".length).trim();
 
           if (interfaceName) {
+            if (!isInterfaceNameInputAllowed(interfaceName) || !isInterfaceNameValid(interfaceName)) {
+              emit({
+                type: "output/error",
+                text: INVALID_INTERFACE_NAME_ERROR,
+                timestamp,
+              });
+              return;
+            }
+
             const resolvedInterface = resolveInterface(interfaceName);
 
             if (!resolvedInterface?.iface) {
@@ -657,15 +665,19 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         key: "interface",
         helpLabel: "interface <name>",
         match: (input) => {
-          if (!input.startsWith("interface ")) {
-            return false;
-          }
-
-          const interfaceName = input.slice("interface".length).trim();
-          return isInterfaceNameInputAllowed(interfaceName);
+          return input.startsWith("interface ");
         },
         run: (timestamp, input) => {
           const interfaceName = input.slice("interface".length).trim();
+          if (!isInterfaceNameInputAllowed(interfaceName) || !isInterfaceNameValid(interfaceName)) {
+            emit({
+              type: "output/error",
+              text: INVALID_INTERFACE_NAME_ERROR,
+              timestamp,
+            });
+            return;
+          }
+
           const resolvedInterface = resolveInterface(interfaceName);
           const interfaceKey = resolvedInterface?.iface
             ? resolvedInterface.key
