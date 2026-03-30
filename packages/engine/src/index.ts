@@ -206,6 +206,11 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
     emit({ type: "output/error", text: "% Command not available in this mode", timestamp });
   };
 
+  const emitAmbiguousCommand = (timestamp: number, command: string) => {
+    appendAction({ type: "command/ambiguous", timestamp, payload: { input: command } });
+    emit({ type: "output/error", text: "% Ambiguous command", timestamp });
+  };
+
   const getActiveInterface = () => {
     if (!state.activeInterface) {
       return undefined;
@@ -876,6 +881,38 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
 
   const allRegisteredCommands = Object.values(commandRegistry).flat();
 
+  const resolveAbbreviatedInput = (input: string, modeCommands: RegisteredCommand[]) => {
+    const inputTokens = input.split(/\s+/);
+    const [rawCommandToken] = inputTokens;
+
+    if (!rawCommandToken) {
+      return { type: "unresolved" as const };
+    }
+
+    const commandTokens = Array.from(new Set(modeCommands.map((command) => command.key.split(" ")[0])));
+
+    if (commandTokens.includes(rawCommandToken)) {
+      return { type: "resolved" as const, input };
+    }
+
+    const matchingCommandTokens = commandTokens
+      .filter((token) => token.startsWith(rawCommandToken))
+      .sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
+
+    if (matchingCommandTokens.length === 0) {
+      return { type: "unresolved" as const };
+    }
+
+    if (matchingCommandTokens.length > 1) {
+      return { type: "ambiguous" as const };
+    }
+
+    return {
+      type: "resolved" as const,
+      input: [matchingCommandTokens[0], ...inputTokens.slice(1)].join(" "),
+    };
+  };
+
   const cloneInterfaces = (
     src: Partial<Record<string, InterfaceConfig>>,
   ): Record<string, InterfaceConfig> =>
@@ -902,6 +939,22 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
       if (matchedModeCommand) {
         matchedModeCommand.run(timestamp, normalizedInput);
         return;
+      }
+
+      const abbreviationResolution = resolveAbbreviatedInput(normalizedInput, modeCommands);
+
+      if (abbreviationResolution.type === "ambiguous") {
+        emitAmbiguousCommand(timestamp, normalizedInput);
+        return;
+      }
+
+      if (abbreviationResolution.type === "resolved" && abbreviationResolution.input !== normalizedInput) {
+        const abbreviatedMatch = modeCommands.find((command) => command.match(abbreviationResolution.input));
+
+        if (abbreviatedMatch) {
+          abbreviatedMatch.run(timestamp, abbreviationResolution.input);
+          return;
+        }
       }
 
       if (allRegisteredCommands.some((command) => command.match(normalizedInput))) {
