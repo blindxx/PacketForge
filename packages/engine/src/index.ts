@@ -222,17 +222,12 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
 
   const INVALID_INTERFACE_NAME_ERROR = "% Invalid interface name";
 
-  const collapseInterfaceKey = (interfaceName: string) => interfaceName.trim().replace(/\s+/g, "");
+  const sanitizeInterfaceInput = (interfaceName: string) => interfaceName.trim().replace(/\s+/g, " ").toLowerCase();
 
-  const isSpacedInterfaceInputAllowed = (interfaceName: string) =>
-    /^(?:gi|gigabitethernet|fa|fastethernet|te|tengigabitethernet)\s+\d+(?:\/\d+)+$/i.test(
-      interfaceName.trim(),
-    );
+  const collapseInterfaceKey = (interfaceName: string) => sanitizeInterfaceInput(interfaceName).replace(/\s+/g, "");
 
-  const isInterfaceNameInputAllowed = (interfaceName: string) =>
-    !/\s/.test(interfaceName.trim()) || isSpacedInterfaceInputAllowed(interfaceName);
-
-  const isInterfaceNameValid = (interfaceName: string) => normalizeInterfaceName(interfaceName) !== undefined;
+  const isInterfaceNameValid = (interfaceName: string) =>
+    /^(?:gi|fa|te)\d+(?:\/\d+)+$/.test(interfaceName);
 
   const formatInterfaceDisplayName = (interfaceName: string) => {
     const gigabitMatch = /^gi(\d+(?:\/\d+)+)$/i.exec(interfaceName);
@@ -287,7 +282,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
   };
 
   const resolveInterface = (interfaceName: string): ResolvedInterface | undefined => {
-    const exactName = interfaceName.trim();
+    const exactName = sanitizeInterfaceInput(interfaceName);
     const collapsedFallbackKey = collapseInterfaceKey(interfaceName);
 
     if (!exactName) {
@@ -537,7 +532,9 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
           const interfaceName = input.slice("show interfaces".length).trim();
 
           if (interfaceName) {
-            if (!isInterfaceNameInputAllowed(interfaceName) || !isInterfaceNameValid(interfaceName)) {
+            const canonicalInterfaceName = normalizeInterfaceName(interfaceName);
+
+            if (!canonicalInterfaceName || !isInterfaceNameValid(canonicalInterfaceName)) {
               emit({
                 type: "output/error",
                 text: INVALID_INTERFACE_NAME_ERROR,
@@ -546,7 +543,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
               return;
             }
 
-            const resolvedInterface = resolveInterface(interfaceName);
+            const resolvedInterface = resolveInterface(canonicalInterfaceName);
 
             if (!resolvedInterface?.iface) {
               emit({
@@ -669,7 +666,9 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         },
         run: (timestamp, input) => {
           const interfaceName = input.slice("interface".length).trim();
-          if (!isInterfaceNameInputAllowed(interfaceName) || !isInterfaceNameValid(interfaceName)) {
+          const canonicalInterfaceName = normalizeInterfaceName(interfaceName);
+
+          if (!canonicalInterfaceName || !isInterfaceNameValid(canonicalInterfaceName)) {
             emit({
               type: "output/error",
               text: INVALID_INTERFACE_NAME_ERROR,
@@ -678,7 +677,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
             return;
           }
 
-          const resolvedInterface = resolveInterface(interfaceName);
+          const resolvedInterface = resolveInterface(canonicalInterfaceName);
           const interfaceKey = resolvedInterface?.iface
             ? resolvedInterface.key
             : resolvedInterface?.canonicalName ?? resolvedInterface?.key;
