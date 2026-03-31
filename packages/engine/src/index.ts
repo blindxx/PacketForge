@@ -882,7 +882,13 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
   const allRegisteredCommands = Object.values(commandRegistry).flat();
 
   const resolveAbbreviatedInput = (input: string, modeCommands: RegisteredCommand[]) => {
-    const inputTokenMatches = [...input.matchAll(/\S+/g)];
+    const inputTokenMatches: RegExpMatchArray[] = [];
+    const tokenRegex = /\S+/g;
+    let match: RegExpMatchArray | null;
+
+    while ((match = tokenRegex.exec(input)) !== null) {
+      inputTokenMatches.push(match);
+    }
 
     if (inputTokenMatches.length === 0) {
       return { type: "unresolved" as const };
