@@ -895,7 +895,12 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
     let candidates = commandPaths;
     let resolvedCommandTokens: string[] = [];
     let consumedInputTokens = 0;
-    let commandResolved = false;
+    let lastCompletedMatch:
+      | {
+          expandedTokens: string[];
+          consumedInputTokens: number;
+        }
+      | undefined;
 
     for (let tokenIndex = 0; tokenIndex < inputTokenMatches.length; tokenIndex += 1) {
       const inputToken = inputTokenMatches[tokenIndex][0];
@@ -932,7 +937,10 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
       const completedCandidates = candidates.filter((path) => path.tokens.length === consumedInputTokens);
 
       if (completedCandidates.length > 0) {
-        commandResolved = true;
+        lastCompletedMatch = {
+          expandedTokens: [...resolvedCommandTokens],
+          consumedInputTokens,
+        };
 
         const canContinueToNextCommandToken =
           tokenIndex + 1 < inputTokenMatches.length &&
@@ -944,17 +952,17 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
       }
     }
 
-    if (!commandResolved || resolvedCommandTokens.length === 0) {
+    if (!lastCompletedMatch || lastCompletedMatch.expandedTokens.length === 0) {
       return { type: "unresolved" as const };
     }
 
-    const lastCommandToken = inputTokenMatches[consumedInputTokens - 1];
+    const lastCommandToken = inputTokenMatches[lastCompletedMatch.consumedInputTokens - 1];
     const remainderStartIndex =
       lastCommandToken && typeof lastCommandToken.index === "number"
         ? lastCommandToken.index + lastCommandToken[0].length
         : undefined;
     const inputRemainder = remainderStartIndex === undefined ? "" : input.slice(remainderStartIndex);
-    const expandedCommand = resolvedCommandTokens.join(" ");
+    const expandedCommand = lastCompletedMatch.expandedTokens.join(" ");
 
     return {
       type: "resolved" as const,
