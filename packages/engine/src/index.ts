@@ -921,7 +921,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
       if (exactMatches.length === 1) {
         const matchedToken = exactMatches[0];
         candidates = candidates.filter((path) => path.tokens[tokenIndex] === matchedToken);
-        resolvedCommandTokens = [...resolvedCommandTokens, matchedToken];
+        resolvedCommandTokens.push(matchedToken);
         consumedInputTokens += 1;
       } else {
         const prefixMatches = tokenValues.filter((token) => token.startsWith(inputToken));
@@ -936,7 +936,7 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
 
         const matchedToken = prefixMatches[0];
         candidates = candidates.filter((path) => path.tokens[tokenIndex] === matchedToken);
-        resolvedCommandTokens = [...resolvedCommandTokens, matchedToken];
+        resolvedCommandTokens.push(matchedToken);
         consumedInputTokens += 1;
       }
 
