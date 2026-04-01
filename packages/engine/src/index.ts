@@ -882,36 +882,97 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
   const allRegisteredCommands = Object.values(commandRegistry).flat();
 
   const resolveAbbreviatedInput = (input: string, modeCommands: RegisteredCommand[]) => {
-    const firstWhitespaceIndex = input.search(/\s/);
-    const hasRemainder = firstWhitespaceIndex >= 0;
-    const rawCommandToken = hasRemainder ? input.slice(0, firstWhitespaceIndex) : input;
-    const inputRemainder = hasRemainder ? input.slice(firstWhitespaceIndex) : "";
+    const inputTokenMatches: RegExpMatchArray[] = [];
+    const tokenRegex = /\S+/g;
+    let match: RegExpMatchArray | null;
 
-    if (!rawCommandToken) {
+    while ((match = tokenRegex.exec(input)) !== null) {
+      inputTokenMatches.push(match);
+    }
+
+    if (inputTokenMatches.length === 0) {
       return { type: "unresolved" as const };
     }
 
-    const commandTokens = Array.from(new Set(modeCommands.map((command) => command.key.split(" ")[0])));
+    const commandPaths = modeCommands
+      .map((command) => ({ tokens: command.key.split(/\s+/), key: command.key }))
+      .sort((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0));
 
-    if (commandTokens.includes(rawCommandToken)) {
-      return { type: "resolved" as const, input };
+    let candidates = commandPaths;
+    let resolvedCommandTokens: string[] = [];
+    let consumedInputTokens = 0;
+    let lastCompletedMatch:
+      | {
+          expandedTokens: string[];
+          consumedInputTokens: number;
+        }
+      | undefined;
+
+    for (let tokenIndex = 0; tokenIndex < inputTokenMatches.length; tokenIndex += 1) {
+      const inputToken = inputTokenMatches[tokenIndex][0];
+      const tokenValues = Array.from(new Set(candidates.filter((path) => path.tokens.length > tokenIndex).map((path) => path.tokens[tokenIndex])));
+
+      if (tokenValues.length === 0) {
+        break;
+      }
+
+      const exactMatches = tokenValues.filter((token) => token === inputToken);
+
+      if (exactMatches.length === 1) {
+        const matchedToken = exactMatches[0];
+        candidates = candidates.filter((path) => path.tokens[tokenIndex] === matchedToken);
+        resolvedCommandTokens.push(matchedToken);
+        consumedInputTokens += 1;
+      } else {
+        const prefixMatches = tokenValues.filter((token) => token.startsWith(inputToken));
+
+        if (prefixMatches.length === 0) {
+          break;
+        }
+
+        if (prefixMatches.length > 1) {
+          return { type: "ambiguous" as const };
+        }
+
+        const matchedToken = prefixMatches[0];
+        candidates = candidates.filter((path) => path.tokens[tokenIndex] === matchedToken);
+        resolvedCommandTokens.push(matchedToken);
+        consumedInputTokens += 1;
+      }
+
+      const completedCandidates = candidates.filter((path) => path.tokens.length === consumedInputTokens);
+
+      if (completedCandidates.length > 0) {
+        lastCompletedMatch = {
+          expandedTokens: [...resolvedCommandTokens],
+          consumedInputTokens,
+        };
+
+        const canContinueToNextCommandToken =
+          tokenIndex + 1 < inputTokenMatches.length &&
+          candidates.some((path) => path.tokens.length > consumedInputTokens);
+
+        if (!canContinueToNextCommandToken) {
+          break;
+        }
+      }
     }
 
-    const matchingCommandTokens = commandTokens
-      .filter((token) => token.startsWith(rawCommandToken))
-      .sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
-
-    if (matchingCommandTokens.length === 0) {
+    if (!lastCompletedMatch || lastCompletedMatch.expandedTokens.length === 0) {
       return { type: "unresolved" as const };
     }
 
-    if (matchingCommandTokens.length > 1) {
-      return { type: "ambiguous" as const };
-    }
+    const lastCommandToken = inputTokenMatches[lastCompletedMatch.consumedInputTokens - 1];
+    const remainderStartIndex =
+      lastCommandToken && typeof lastCommandToken.index === "number"
+        ? lastCommandToken.index + lastCommandToken[0].length
+        : undefined;
+    const inputRemainder = remainderStartIndex === undefined ? "" : input.slice(remainderStartIndex);
+    const expandedCommand = lastCompletedMatch.expandedTokens.join(" ");
 
     return {
       type: "resolved" as const,
-      input: `${matchingCommandTokens[0]}${inputRemainder}`,
+      input: `${expandedCommand}${inputRemainder}`,
     };
   };
 
