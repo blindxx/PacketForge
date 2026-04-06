@@ -41,6 +41,13 @@ export default function EngineTestPage() {
     setCommand("");
   };
 
+  const latestOutputText =
+    latestEvent?.type === "output/text" || latestEvent?.type === "output/error"
+      ? latestEvent.text
+      : latestEvent
+        ? JSON.stringify(latestEvent, null, 2)
+        : "No events yet";
+
   return (
     <main style={{ padding: "2rem", display: "grid", gap: "1rem", maxWidth: "48rem" }}>
       <h1 style={{ fontSize: "1.75rem", fontWeight: 700 }}>Engine Harness Test</h1>
@@ -65,7 +72,7 @@ export default function EngineTestPage() {
       <section>
         <strong>Latest event/output:</strong>
         <pre style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
-          {latestEvent ? JSON.stringify(latestEvent, null, 2) : "No events yet"}
+          {latestOutputText}
         </pre>
       </section>
 

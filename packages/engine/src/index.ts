@@ -383,11 +383,11 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         match: (input) => input === "help",
         run: (timestamp) => {
           const activeMode = getActiveMode(mode.stack);
-          const commands = commandRegistry[activeMode] ?? [];
+          const commands = getModeCommandPaths(activeMode);
           appendAction({ type: "command/help", timestamp });
           emit({
             type: "output/text",
-            text: `Available commands: ${commands.map((command) => command.helpLabel).join(", ")}`,
+            text: commands.join("\n"),
             timestamp,
           });
         },
@@ -448,11 +448,11 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         match: (input) => input === "help",
         run: (timestamp) => {
           const activeMode = getActiveMode(mode.stack);
-          const commands = commandRegistry[activeMode] ?? [];
+          const commands = getModeCommandPaths(activeMode);
           appendAction({ type: "command/help", timestamp });
           emit({
             type: "output/text",
-            text: `Available commands: ${commands.map((command) => command.helpLabel).join(", ")}`,
+            text: commands.join("\n"),
             timestamp,
           });
         },
@@ -607,11 +607,11 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         match: (input) => input === "help",
         run: (timestamp) => {
           const activeMode = getActiveMode(mode.stack);
-          const commands = commandRegistry[activeMode] ?? [];
+          const commands = getModeCommandPaths(activeMode);
           appendAction({ type: "command/help", timestamp });
           emit({
             type: "output/text",
-            text: `Available commands: ${commands.map((command) => command.helpLabel).join(", ")}`,
+            text: commands.join("\n"),
             timestamp,
           });
         },
@@ -744,11 +744,11 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         match: (input) => input === "help",
         run: (timestamp) => {
           const activeMode = getActiveMode(mode.stack);
-          const commands = commandRegistry[activeMode] ?? [];
+          const commands = getModeCommandPaths(activeMode);
           appendAction({ type: "command/help", timestamp });
           emit({
             type: "output/text",
-            text: `Available commands: ${commands.map((command) => command.helpLabel).join(", ")}`,
+            text: commands.join("\n"),
             timestamp,
           });
         },
@@ -877,6 +877,20 @@ export function createSession(options?: CreateSessionOptions): EngineSession {
         },
       },
     ],
+  };
+
+  const getModeCommandPaths = (modeId: EngineModeId) => {
+    const modeCommands = commandRegistry[modeId] ?? [];
+    return Array.from(
+      new Set(
+        modeCommands.map((command) =>
+          command.key
+            .split(/\s+/)
+            .filter((token) => token.length > 0)
+            .join(" "),
+        ),
+      ),
+    ).sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
   };
 
   const allRegisteredCommands = Object.values(commandRegistry).flat();
